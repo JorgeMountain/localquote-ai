@@ -1,36 +1,103 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# LocalQuote AI
 
-## Getting Started
+MVP de una plataforma SaaS para negocios locales. El producto permite configurar negocios, cargar FAQs, capturar leads desde un chat publico, responder con IA basada en datos del negocio, generar solicitudes de cita y crear cotizaciones estimadas.
 
-First, run the development server:
+La primera pantalla es el dashboard operativo, no una landing page.
+
+## Stack
+
+- Next.js App Router
+- TypeScript
+- Tailwind CSS v4
+- OpenAI API opcional para respuestas IA
+- Supabase preparado para base de datos y autenticacion
+- Adaptador `MessagingProvider` preparado para WhatsApp, con proveedor web activo en el MVP
+
+## Ejecutar localmente
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Abrir `http://localhost:3000`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Rutas principales:
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- `/` dashboard privado demo
+- `/businesses` configuracion de negocios y FAQs
+- `/conversations` conversaciones recientes
+- `/appointments` solicitudes de cita
+- `/quotes` cotizaciones
+- `/b/sonrisa-clara` chat publico odontologo
+- `/b/fixpro-tecnicos` chat publico tecnico
 
-## Learn More
+## Variables de entorno
 
-To learn more about Next.js, take a look at the following resources:
+Copia `.env.example` a `.env.local` si vas a conectar servicios reales.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```bash
+OPENAI_API_KEY=
+OPENAI_MODEL=gpt-4o-mini
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
+SUPABASE_SERVICE_ROLE_KEY=
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Sin `OPENAI_API_KEY`, el chat usa un fallback determinista con FAQs, reglas e intencion detectada. Esto permite probar el MVP sin costo ni llaves.
 
-## Deploy on Vercel
+## Base de datos
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+La migracion esta en:
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```text
+supabase/migrations/001_initial_schema.sql
+```
+
+Tablas incluidas:
+
+- `profiles`
+- `businesses`
+- `business_faqs`
+- `customers`
+- `conversations`
+- `messages`
+- `appointment_requests`
+- `quotes`
+
+El MVP actual usa datos seed en memoria para ser ejecutable inmediatamente. La capa Supabase esta aislada en `src/lib/supabase.ts` para reemplazar el store demo por queries reales.
+
+## IA
+
+La ruta `POST /api/chat` construye respuestas con:
+
+- Datos del negocio
+- Servicios
+- Horarios
+- Reglas
+- FAQs
+- Historial reciente
+
+Regla clave: si falta informacion, el asistente debe pedir confirmacion del negocio y no inventar datos.
+
+## WhatsApp
+
+La integracion real no esta construida. La interfaz queda aislada en:
+
+```text
+src/lib/messaging.ts
+```
+
+Para conectarlo despues:
+
+1. Implementar `WhatsAppProvider` con Twilio o WhatsApp Business API.
+2. Normalizar mensajes entrantes al tipo `ChatRequest`.
+3. Reutilizar la misma ruta/logica de negocio que usa el chat web.
+4. Persistir mensajes en Supabase en lugar del store en memoria.
+
+## Validacion
+
+```bash
+npm run lint
+npm run build
+```

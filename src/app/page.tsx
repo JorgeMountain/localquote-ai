@@ -1,65 +1,126 @@
-import Image from "next/image";
+import { CalendarClock, FileText, MessageSquareText, UsersRound } from "lucide-react";
+import Link from "next/link";
+import { AppShell } from "@/components/AppShell";
+import { MetricCard } from "@/components/MetricCard";
+import { StatusBadge } from "@/components/StatusBadge";
+import { currencyCop, shortDate } from "@/lib/format";
+import { getCustomer, getSnapshot } from "@/lib/store";
 
-export default function Home() {
+export default function DashboardPage() {
+  const data = getSnapshot();
+  const totalQuoted = data.quotes.reduce((sum, quote) => sum + quote.maxPrice, 0);
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+    <AppShell>
+      <header className="flex flex-col gap-4 border-b border-black/10 pb-6 lg:flex-row lg:items-end lg:justify-between">
+        <div>
+          <p className="text-sm font-semibold uppercase tracking-[0.2em] text-[#706d62]">
+            Dashboard privado
           </p>
+          <h1 className="mt-2 text-3xl font-semibold tracking-normal sm:text-5xl">
+            Leads, citas y cotizaciones en un solo tablero
+          </h1>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+        <Link
+          href="/businesses"
+          className="inline-flex h-11 items-center justify-center rounded-md bg-black px-4 text-sm font-semibold text-white"
+        >
+          Configurar negocio
+        </Link>
+      </header>
+
+      <section className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <MetricCard
+          label="Clientes nuevos"
+          value={String(data.customers.length)}
+          detail="Capturados desde chat web y datos seed."
+          icon={UsersRound}
+        />
+        <MetricCard
+          label="Conversaciones"
+          value={String(data.conversations.length)}
+          detail="Historial por negocio y canal."
+          icon={MessageSquareText}
+        />
+        <MetricCard
+          label="Citas pendientes"
+          value={String(data.appointmentRequests.filter((item) => item.status === "pending").length)}
+          detail="Sin calendario externo en esta fase."
+          icon={CalendarClock}
+        />
+        <MetricCard
+          label="Pipeline estimado"
+          value={currencyCop(totalQuoted)}
+          detail="Suma de cotizaciones maximas."
+          icon={FileText}
+        />
+      </section>
+
+      <section className="mt-6 grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
+        <div className="rounded-md border border-black/10 bg-white p-5">
+          <div className="flex items-center justify-between gap-4">
+            <h2 className="text-xl font-semibold">Conversaciones recientes</h2>
+            <Link href="/conversations" className="text-sm font-semibold underline-offset-4 hover:underline">
+              Ver todas
+            </Link>
+          </div>
+          <div className="mt-5 overflow-x-auto">
+            <table className="w-full min-w-[640px] text-left text-sm">
+              <thead className="text-xs uppercase tracking-[0.18em] text-[#706d62]">
+                <tr>
+                  <th className="py-3">Cliente</th>
+                  <th>Negocio</th>
+                  <th>Canal</th>
+                  <th>Intencion</th>
+                  <th>Creada</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-black/10">
+                {data.conversations.map((conversation) => {
+                  const customer = getCustomer(conversation.customerId);
+                  const business = data.businesses.find((item) => item.id === conversation.businessId);
+                  return (
+                    <tr key={conversation.id}>
+                      <td className="py-4 font-medium">{customer?.name}</td>
+                      <td>{business?.name}</td>
+                      <td>{conversation.channel}</td>
+                      <td>
+                        <StatusBadge value={conversation.lastIntent} />
+                      </td>
+                      <td>{shortDate(conversation.createdAt)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </main>
-    </div>
+
+        <div className="rounded-md border border-black/10 bg-[#111111] p-5 text-white">
+          <h2 className="text-xl font-semibold">Negocios activos</h2>
+          <div className="mt-5 space-y-4">
+            {data.businesses.map((business) => (
+              <article key={business.id} className="rounded-md border border-white/10 bg-white/5 p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="font-semibold">{business.name}</p>
+                    <p className="mt-1 text-sm text-white/65">{business.description}</p>
+                  </div>
+                  <span className="rounded-sm bg-[#e2f26b] px-2 py-1 text-xs font-semibold text-black">
+                    {business.type === "dentist" ? "Odonto" : "Tecnico"}
+                  </span>
+                </div>
+                <Link
+                  href={`/b/${business.slug}`}
+                  className="mt-4 inline-flex text-sm font-semibold text-[#e2f26b] underline-offset-4 hover:underline"
+                >
+                  Abrir chat publico
+                </Link>
+              </article>
+            ))}
+          </div>
+        </div>
+      </section>
+    </AppShell>
   );
 }
