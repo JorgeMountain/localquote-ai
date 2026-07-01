@@ -27,6 +27,8 @@ export async function POST(request: Request) {
 
   const businessFaqs = await getPublicFaqs(supabase, business.id);
   const analysis = analyzeCommercialRequest(input.message, business);
+  const hasDirectFaqAnswer = hasRelevantFaq(input.message, businessFaqs);
+  const effectiveIntent = hasDirectFaqAnswer ? "faq" : analysis.intent;
   const customerId = input.customerId ?? crypto.randomUUID();
   const conversationId = input.conversationId ?? crypto.randomUUID();
 
@@ -36,7 +38,7 @@ export async function POST(request: Request) {
       business_id: business.id,
       name: input.customerName,
       phone: input.customerPhone,
-      status: analysis.appointmentDraft ? "appointment" : analysis.quoteDraft ? "quoted" : "new",
+      status: !hasDirectFaqAnswer && analysis.appointmentDraft ? "appointment" : !hasDirectFaqAnswer && analysis.quoteDraft ? "quoted" : "new",
     });
 
     if (error) {
@@ -50,7 +52,7 @@ export async function POST(request: Request) {
     history: [],
     userMessage: input.message,
   });
-  const reply = buildCommercialReply(ai.reply, analysis);
+  const reply = hasDirectFaqAnswer ? ai.reply : buildCommercialReply(ai.reply, analysis);
 
   if (!input.conversationId) {
     const { error } = await supabase.from("conversations").insert({
@@ -58,7 +60,7 @@ export async function POST(request: Request) {
       business_id: business.id,
       customer_id: customerId,
       channel: "web",
-      last_intent: analysis.intent,
+      last_intent: effectiveIntent,
     });
 
     if (error) {
@@ -86,7 +88,7 @@ export async function POST(request: Request) {
   }
 
   const quote =
-    analysis.quoteDraft
+    !hasDirectFaqAnswer && analysis.quoteDraft
       ? {
           id: crypto.randomUUID(),
           businessId: business.id,
@@ -115,7 +117,7 @@ export async function POST(request: Request) {
   }
 
   const appointment =
-    analysis.appointmentDraft
+    !hasDirectFaqAnswer && analysis.appointmentDraft
       ? {
           id: crypto.randomUUID(),
           businessId: business.id,
@@ -145,10 +147,27 @@ export async function POST(request: Request) {
     conversationId,
     customerId,
     reply,
-    intent: analysis.intent,
+    intent: effectiveIntent,
     quote,
     appointment,
   });
 
   return NextResponse.json(response);
+}
+
+function hasRelevantFaq(message: string, faqs: Awaited<ReturnType<typeof getPublicFaqs>>) {
+  const tokens = message
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .split(/\W+/)
+    .filter((token) => token.length > 3);
+
+  return faqs.some((faq) => {
+    const searchable = `${faq.question} ${faq.answer}`
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "");
+    return tokens.some((token) => searchable.includes(token));
+  });
 }
