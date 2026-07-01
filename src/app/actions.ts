@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { businesses, faqs } from "@/lib/seed";
 import { createClient } from "@/lib/supabase/server";
+import type { AppointmentStatus, BusinessType, LeadStatus, QuoteStatus } from "@/lib/types";
 
 export async function seedDemoData() {
   const supabase = await createClient();
@@ -12,6 +13,7 @@ export async function seedDemoData() {
   } = await supabase.auth.getUser();
 
   if (!user) redirect("/login");
+  await ensureProfile(supabase, user.id, user.email);
 
   const { data: existing } = await supabase
     .from("businesses")
@@ -149,6 +151,37 @@ export async function updateBusiness(formData: FormData) {
   revalidatePath("/businesses");
 }
 
+export async function createBusiness(formData: FormData) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) redirect("/login");
+  await ensureProfile(supabase, user.id, user.email);
+
+  const name = String(formData.get("name") ?? "").trim();
+  const type = parseBusinessType(String(formData.get("type") ?? "repair"));
+  const slug = slugify(String(formData.get("slug") ?? "") || name);
+
+  const { error } = await supabase.from("businesses").insert({
+    owner_id: user.id,
+    name,
+    slug,
+    type,
+    description: String(formData.get("description") ?? "").trim(),
+    services: splitLinesOrCommas(String(formData.get("services") ?? "")),
+    hours: String(formData.get("hours") ?? "").trim(),
+    location: String(formData.get("location") ?? "").trim(),
+    phone: String(formData.get("phone") ?? "").trim(),
+    rules: splitLinesOrCommas(String(formData.get("rules") ?? "")),
+  });
+
+  if (error) throw error;
+  revalidatePath("/");
+  revalidatePath("/businesses");
+}
+
 export async function createFaq(formData: FormData) {
   const supabase = await createClient();
   const {
@@ -166,6 +199,92 @@ export async function createFaq(formData: FormData) {
 
   if (error) throw error;
   revalidatePath("/businesses");
+}
+
+export async function updateFaq(formData: FormData) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) redirect("/login");
+
+  const { error } = await supabase
+    .from("business_faqs")
+    .update({
+      question: String(formData.get("question") ?? "").trim(),
+      answer: String(formData.get("answer") ?? "").trim(),
+      category: String(formData.get("category") ?? "").trim() || null,
+    })
+    .eq("id", String(formData.get("id") ?? ""));
+
+  if (error) throw error;
+  revalidatePath("/businesses");
+}
+
+export async function deleteFaq(formData: FormData) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) redirect("/login");
+
+  const { error } = await supabase.from("business_faqs").delete().eq("id", String(formData.get("id") ?? ""));
+
+  if (error) throw error;
+  revalidatePath("/businesses");
+}
+
+export async function updateAppointmentStatus(formData: FormData) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) redirect("/login");
+
+  const status = parseAppointmentStatus(String(formData.get("status") ?? ""));
+  const { error } = await supabase
+    .from("appointment_requests")
+    .update({ status })
+    .eq("id", String(formData.get("id") ?? ""));
+
+  if (error) throw error;
+  revalidatePath("/");
+  revalidatePath("/appointments");
+}
+
+export async function updateQuoteStatus(formData: FormData) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) redirect("/login");
+
+  const status = parseQuoteStatus(String(formData.get("status") ?? ""));
+  const { error } = await supabase.from("quotes").update({ status }).eq("id", String(formData.get("id") ?? ""));
+
+  if (error) throw error;
+  revalidatePath("/");
+  revalidatePath("/quotes");
+}
+
+export async function updateCustomerStatus(formData: FormData) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) redirect("/login");
+
+  const status = parseLeadStatus(String(formData.get("status") ?? ""));
+  const { error } = await supabase.from("customers").update({ status }).eq("id", String(formData.get("id") ?? ""));
+
+  if (error) throw error;
+  revalidatePath("/");
+  revalidatePath("/conversations");
 }
 
 async function createDemoLead(
@@ -235,9 +354,47 @@ async function createDemoLead(
   }
 }
 
+async function ensureProfile(supabase: Awaited<ReturnType<typeof createClient>>, userId: string, email?: string) {
+  const { error } = await supabase.from("profiles").upsert({
+    id: userId,
+    full_name: email ? email.split("@")[0] : "Owner",
+  });
+
+  if (error) throw error;
+}
+
 function splitLinesOrCommas(value: string) {
   return value
     .split(/\n|,/)
     .map((item) => item.trim())
     .filter(Boolean);
+}
+
+function slugify(value: string) {
+  return value
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 64);
+}
+
+function parseBusinessType(value: string): BusinessType {
+  return value === "dentist" ? "dentist" : "repair";
+}
+
+function parseAppointmentStatus(value: string): AppointmentStatus {
+  if (value === "confirmed" || value === "cancelled") return value;
+  return "pending";
+}
+
+function parseQuoteStatus(value: string): QuoteStatus {
+  if (value === "sent" || value === "accepted" || value === "rejected") return value;
+  return "draft";
+}
+
+function parseLeadStatus(value: string): LeadStatus {
+  if (value === "qualified" || value === "appointment" || value === "quoted") return value;
+  return "new";
 }

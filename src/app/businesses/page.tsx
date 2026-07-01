@@ -18,11 +18,10 @@ export default async function BusinessesPage() {
   return (
     <AppShell>
       <Header title="Negocios y FAQs" subtitle="Configura la informacion que limita y guia las respuestas de IA." />
-      {data.businesses.length === 0 ? (
-        <OnboardingPanel userEmail={user.email} />
-      ) : (
+      {data.businesses.length === 0 && <OnboardingPanel userEmail={user.email} />}
+      <div className="mt-6">
         <BusinessWorkspace businesses={data.businesses} faqs={data.faqs} />
-      )}
+      </div>
     </AppShell>
   );
 }

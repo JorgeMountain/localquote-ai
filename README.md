@@ -72,6 +72,8 @@ Tablas incluidas:
 
 La migracion ya fue aplicada al proyecto Supabase real. El dashboard usa queries reales con RLS y el chat publico inserta leads desde la publishable key.
 
+`/businesses` permite crear negocios, editar la ficha del negocio seleccionado, crear FAQs, editar FAQs y eliminarlas. Las paginas de conversaciones, citas y cotizaciones permiten actualizar estados desde el dashboard.
+
 Al registrarte e iniciar sesion, si el dashboard no tiene datos, usa **Cargar demo** para crear:
 
 - Clinica Sonrisa Clara
@@ -94,6 +96,8 @@ La ruta `POST /api/chat` construye respuestas con:
 - Historial reciente
 
 Regla clave: si falta informacion, el asistente debe pedir confirmacion del negocio y no inventar datos.
+
+El flujo comercial solo crea una cita cuando detecta servicio, fecha y hora preferida. Solo crea una cotizacion cuando detecta servicio y descripcion suficiente del caso. Si faltan datos, guarda la conversacion y pide lo faltante.
 
 ## WhatsApp
 

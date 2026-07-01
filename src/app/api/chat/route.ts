@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { generateAssistantReply } from "@/lib/ai";
+import { analyzeCommercialRequest, buildCommercialReply } from "@/lib/commercial";
 import { getPublicBusiness, getPublicFaqs } from "@/lib/db";
 import { WebChatProvider } from "@/lib/messaging";
 import { createAnonRouteClient } from "@/lib/supabase/route";
@@ -25,6 +26,7 @@ export async function POST(request: Request) {
   }
 
   const businessFaqs = await getPublicFaqs(supabase, business.id);
+  const analysis = analyzeCommercialRequest(input.message, business);
   const customerId = input.customerId ?? crypto.randomUUID();
   const conversationId = input.conversationId ?? crypto.randomUUID();
 
@@ -34,7 +36,7 @@ export async function POST(request: Request) {
       business_id: business.id,
       name: input.customerName,
       phone: input.customerPhone,
-      status: "new",
+      status: analysis.appointmentDraft ? "appointment" : analysis.quoteDraft ? "quoted" : "new",
     });
 
     if (error) {
@@ -48,6 +50,7 @@ export async function POST(request: Request) {
     history: [],
     userMessage: input.message,
   });
+  const reply = buildCommercialReply(ai.reply, analysis);
 
   if (!input.conversationId) {
     const { error } = await supabase.from("conversations").insert({
@@ -55,7 +58,7 @@ export async function POST(request: Request) {
       business_id: business.id,
       customer_id: customerId,
       channel: "web",
-      last_intent: ai.intent,
+      last_intent: analysis.intent,
     });
 
     if (error) {
@@ -74,7 +77,7 @@ export async function POST(request: Request) {
       id: crypto.randomUUID(),
       conversation_id: conversationId,
       role: "assistant",
-      body: ai.reply,
+      body: reply,
     },
   ]);
 
@@ -83,16 +86,12 @@ export async function POST(request: Request) {
   }
 
   const quote =
-    ai.intent === "quote"
+    analysis.quoteDraft
       ? {
           id: crypto.randomUUID(),
           businessId: business.id,
           customerId,
-          service: business.type === "dentist" ? "Consulta o valoracion" : "Diagnostico tecnico",
-          description: input.message,
-          minPrice: business.type === "dentist" ? 120000 : 80000,
-          maxPrice: business.type === "dentist" ? 250000 : 220000,
-          notes: "Cotizacion estimada generada por IA. Requiere confirmacion del negocio.",
+          ...analysis.quoteDraft,
           status: "draft" as const,
         }
       : undefined;
@@ -116,14 +115,12 @@ export async function POST(request: Request) {
   }
 
   const appointment =
-    ai.intent === "appointment"
+    analysis.appointmentDraft
       ? {
           id: crypto.randomUUID(),
           businessId: business.id,
           customerId,
-          service: business.services[0],
-          preferredDate: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
-          preferredTime: "Por confirmar",
+          ...analysis.appointmentDraft,
           status: "pending" as const,
         }
       : undefined;
@@ -147,8 +144,8 @@ export async function POST(request: Request) {
   const response = await provider.send({
     conversationId,
     customerId,
-    reply: ai.reply,
-    intent: ai.intent,
+    reply,
+    intent: analysis.intent,
     quote,
     appointment,
   });

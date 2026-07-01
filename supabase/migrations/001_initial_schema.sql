@@ -243,10 +243,7 @@ on customers for insert to anon, authenticated
 with check (
   char_length(name) > 1
   and char_length(phone) > 4
-  and exists (
-    select 1 from businesses
-    where businesses.id = customers.business_id
-  )
+  and business_id is not null
 );
 
 create policy "customers_owner_select"
@@ -280,11 +277,8 @@ create policy "conversations_public_insert"
 on conversations for insert to anon, authenticated
 with check (
   channel = 'web'
-  and exists (
-    select 1 from customers
-    where customers.id = conversations.customer_id
-    and customers.business_id = conversations.business_id
-  )
+  and business_id is not null
+  and customer_id is not null
 );
 
 create policy "conversations_owner_select"
@@ -301,10 +295,8 @@ create policy "messages_public_insert"
 on messages for insert to anon, authenticated
 with check (
   role in ('assistant', 'customer')
-  and exists (
-    select 1 from conversations
-    where conversations.id = messages.conversation_id
-  )
+  and char_length(body) > 0
+  and conversation_id is not null
 );
 
 create policy "messages_owner_select"
@@ -322,11 +314,10 @@ create policy "appointment_requests_public_insert"
 on appointment_requests for insert to anon, authenticated
 with check (
   char_length(service) > 1
-  and exists (
-    select 1 from customers
-    where customers.id = appointment_requests.customer_id
-    and customers.business_id = appointment_requests.business_id
-  )
+  and preferred_date is not null
+  and char_length(preferred_time) > 1
+  and business_id is not null
+  and customer_id is not null
 );
 
 create policy "appointment_requests_owner_select"
@@ -362,11 +353,9 @@ with check (
   min_price >= 0
   and max_price >= min_price
   and char_length(service) > 1
-  and exists (
-    select 1 from customers
-    where customers.id = quotes.customer_id
-    and customers.business_id = quotes.business_id
-  )
+  and char_length(description) > 10
+  and business_id is not null
+  and customer_id is not null
 );
 
 create policy "quotes_owner_select"

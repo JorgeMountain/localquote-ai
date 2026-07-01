@@ -1,3 +1,4 @@
+import { updateQuoteStatus } from "@/app/actions";
 import { AppShell } from "@/components/AppShell";
 import { OnboardingPanel } from "@/components/OnboardingPanel";
 import { StatusBadge } from "@/components/StatusBadge";
@@ -33,7 +34,25 @@ export default async function QuotesPage() {
                   <h2 className="text-lg font-semibold">{quote.service}</h2>
                   <p className="mt-1 text-sm text-[#706d62]">{customer?.name} - {quote.description}</p>
                 </div>
-                <StatusBadge value={quote.status} />
+                <div className="grid gap-2">
+                  <StatusBadge value={quote.status} />
+                  <form action={updateQuoteStatus} className="flex items-center gap-2">
+                    <input type="hidden" name="id" value={quote.id} />
+                    <select
+                      className="h-9 rounded-md border border-black/15 bg-[#f8f6f1] px-2 text-sm"
+                      name="status"
+                      defaultValue={quote.status}
+                    >
+                      <option value="draft">Borrador</option>
+                      <option value="sent">Enviada</option>
+                      <option value="accepted">Aceptada</option>
+                      <option value="rejected">Rechazada</option>
+                    </select>
+                    <button className="h-9 rounded-md bg-black px-3 text-sm font-semibold text-white">
+                      Guardar
+                    </button>
+                  </form>
+                </div>
               </div>
               <p className="mt-4 text-2xl font-semibold">
                 {currencyCop(quote.minPrice)} - {currencyCop(quote.maxPrice)}

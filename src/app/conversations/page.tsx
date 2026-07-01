@@ -1,3 +1,4 @@
+import { updateCustomerStatus } from "@/app/actions";
 import { AppShell } from "@/components/AppShell";
 import { OnboardingPanel } from "@/components/OnboardingPanel";
 import { StatusBadge } from "@/components/StatusBadge";
@@ -40,7 +41,27 @@ export default async function ConversationsPage() {
                       {business?.name} - {customer?.phone} - {shortDate(conversation.createdAt)}
                     </p>
                   </div>
-                  <StatusBadge value={conversation.lastIntent} />
+                  <div className="grid gap-2 sm:justify-items-end">
+                    <StatusBadge value={conversation.lastIntent} />
+                    {customer && (
+                      <form action={updateCustomerStatus} className="flex items-center gap-2">
+                        <input type="hidden" name="id" value={customer.id} />
+                        <select
+                          className="h-9 rounded-md border border-black/15 bg-[#f8f6f1] px-2 text-sm"
+                          name="status"
+                          defaultValue={customer.status}
+                        >
+                          <option value="new">Nuevo</option>
+                          <option value="qualified">Calificado</option>
+                          <option value="appointment">Cita</option>
+                          <option value="quoted">Cotizado</option>
+                        </select>
+                        <button className="h-9 rounded-md bg-black px-3 text-sm font-semibold text-white">
+                          Guardar
+                        </button>
+                      </form>
+                    )}
+                  </div>
                 </div>
                 <div className="mt-4 grid gap-2">
                   {thread.map((message) => (

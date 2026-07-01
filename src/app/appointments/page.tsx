@@ -1,6 +1,6 @@
+import { updateAppointmentStatus } from "@/app/actions";
 import { AppShell } from "@/components/AppShell";
 import { OnboardingPanel } from "@/components/OnboardingPanel";
-import { StatusBadge } from "@/components/StatusBadge";
 import { getDashboardData } from "@/lib/db";
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
@@ -43,7 +43,21 @@ export default async function AppointmentsPage() {
                   <td>{appointment.preferredDate}</td>
                   <td>{appointment.preferredTime}</td>
                   <td>
-                    <StatusBadge value={appointment.status} />
+                    <form action={updateAppointmentStatus} className="flex items-center gap-2">
+                      <input type="hidden" name="id" value={appointment.id} />
+                      <select
+                        className="h-9 rounded-md border border-black/15 bg-[#f8f6f1] px-2 text-sm"
+                        name="status"
+                        defaultValue={appointment.status}
+                      >
+                        <option value="pending">Pendiente</option>
+                        <option value="confirmed">Confirmada</option>
+                        <option value="cancelled">Cancelada</option>
+                      </select>
+                      <button className="h-9 rounded-md bg-black px-3 text-sm font-semibold text-white">
+                        Guardar
+                      </button>
+                    </form>
                   </td>
                 </tr>
               );

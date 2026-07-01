@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import { analyzeCommercialRequest } from "./commercial";
 import type { Business, BusinessFaq, Conversation, Message } from "./types";
 
 let openaiClient: OpenAI | null = null;
@@ -12,11 +13,19 @@ function getOpenAI() {
 }
 
 export function detectIntent(text: string): Conversation["lastIntent"] {
-  const normalized = text.toLowerCase();
-  if (/(agenda|agendar|cita|turno|horario|disponible)/.test(normalized)) return "appointment";
-  if (/(cotiza|cotizacion|precio|cuanto|valor|cuesta|presupuesto)/.test(normalized)) return "quote";
-  if (/(asesor|persona|confirmar|llamar)/.test(normalized)) return "handoff";
-  return "faq";
+  return analyzeCommercialRequest(text, {
+    id: "intent-only",
+    ownerId: "intent-only",
+    name: "Negocio",
+    slug: "negocio",
+    type: "repair",
+    description: "",
+    services: [],
+    hours: "",
+    location: "",
+    phone: "",
+    rules: [],
+  }).intent;
 }
 
 function relevantFaqReply(text: string, faqs: BusinessFaq[]) {
@@ -37,7 +46,7 @@ export async function generateAssistantReply(input: {
   history: Message[];
   userMessage: string;
 }) {
-  const intent = detectIntent(input.userMessage);
+  const intent = analyzeCommercialRequest(input.userMessage, input.business).intent;
   const client = getOpenAI();
 
   if (client) {
