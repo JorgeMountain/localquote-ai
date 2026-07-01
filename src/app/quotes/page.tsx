@@ -1,10 +1,20 @@
 import { AppShell } from "@/components/AppShell";
+import { OnboardingPanel } from "@/components/OnboardingPanel";
 import { StatusBadge } from "@/components/StatusBadge";
 import { currencyCop } from "@/lib/format";
-import { getCustomer, getSnapshot } from "@/lib/store";
+import { getDashboardData } from "@/lib/db";
+import { createClient } from "@/lib/supabase/server";
+import { redirect } from "next/navigation";
 
-export default function QuotesPage() {
-  const data = getSnapshot();
+export default async function QuotesPage() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) redirect("/login");
+
+  const data = await getDashboardData(supabase, user.id);
 
   return (
     <AppShell>
@@ -13,9 +23,9 @@ export default function QuotesPage() {
         <p className="mt-2 text-[#706d62]">Estimados marcados para confirmacion del negocio.</p>
       </header>
 
-      <div className="grid gap-4">
+      {data.businesses.length === 0 ? <OnboardingPanel userEmail={user.email} /> : <div className="grid gap-4">
         {data.quotes.map((quote) => {
-          const customer = getCustomer(quote.customerId);
+          const customer = data.customers.find((item) => item.id === quote.customerId);
           return (
             <article key={quote.id} className="rounded-md border border-black/10 bg-white p-5">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -32,7 +42,7 @@ export default function QuotesPage() {
             </article>
           );
         })}
-      </div>
+      </div>}
     </AppShell>
   );
 }

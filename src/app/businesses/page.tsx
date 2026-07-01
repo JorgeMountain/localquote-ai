@@ -1,14 +1,28 @@
 import { AppShell } from "@/components/AppShell";
 import { BusinessWorkspace } from "@/components/BusinessWorkspace";
-import { getSnapshot } from "@/lib/store";
+import { OnboardingPanel } from "@/components/OnboardingPanel";
+import { getDashboardData } from "@/lib/db";
+import { createClient } from "@/lib/supabase/server";
+import { redirect } from "next/navigation";
 
-export default function BusinessesPage() {
-  const data = getSnapshot();
+export default async function BusinessesPage() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) redirect("/login");
+
+  const data = await getDashboardData(supabase, user.id);
 
   return (
     <AppShell>
       <Header title="Negocios y FAQs" subtitle="Configura la informacion que limita y guia las respuestas de IA." />
-      <BusinessWorkspace businesses={data.businesses} faqs={data.faqs} />
+      {data.businesses.length === 0 ? (
+        <OnboardingPanel userEmail={user.email} />
+      ) : (
+        <BusinessWorkspace businesses={data.businesses} faqs={data.faqs} />
+      )}
     </AppShell>
   );
 }

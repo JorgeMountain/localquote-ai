@@ -1,9 +1,19 @@
 import { AppShell } from "@/components/AppShell";
+import { OnboardingPanel } from "@/components/OnboardingPanel";
 import { StatusBadge } from "@/components/StatusBadge";
-import { getCustomer, getSnapshot } from "@/lib/store";
+import { getDashboardData } from "@/lib/db";
+import { createClient } from "@/lib/supabase/server";
+import { redirect } from "next/navigation";
 
-export default function AppointmentsPage() {
-  const data = getSnapshot();
+export default async function AppointmentsPage() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) redirect("/login");
+
+  const data = await getDashboardData(supabase, user.id);
 
   return (
     <AppShell>
@@ -12,7 +22,7 @@ export default function AppointmentsPage() {
         <p className="mt-2 text-[#706d62]">Agenda simple sin calendario externo.</p>
       </header>
 
-      <div className="rounded-md border border-black/10 bg-white p-5">
+      {data.businesses.length === 0 ? <OnboardingPanel userEmail={user.email} /> : <div className="rounded-md border border-black/10 bg-white p-5">
         <table className="w-full min-w-[720px] text-left text-sm">
           <thead className="text-xs uppercase tracking-[0.18em] text-[#706d62]">
             <tr>
@@ -25,7 +35,7 @@ export default function AppointmentsPage() {
           </thead>
           <tbody className="divide-y divide-black/10">
             {data.appointmentRequests.map((appointment) => {
-              const customer = getCustomer(appointment.customerId);
+              const customer = data.customers.find((item) => item.id === appointment.customerId);
               return (
                 <tr key={appointment.id}>
                   <td className="py-4 font-medium">{customer?.name}</td>
@@ -40,7 +50,7 @@ export default function AppointmentsPage() {
             })}
           </tbody>
         </table>
-      </div>
+      </div>}
     </AppShell>
   );
 }

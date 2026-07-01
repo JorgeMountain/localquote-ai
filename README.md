@@ -10,7 +10,7 @@ La primera pantalla es el dashboard operativo, no una landing page.
 - TypeScript
 - Tailwind CSS v4
 - OpenAI API opcional para respuestas IA
-- Supabase preparado para base de datos y autenticacion
+- Supabase real para base de datos y autenticacion
 - Adaptador `MessagingProvider` preparado para WhatsApp, con proveedor web activo en el MVP
 
 ## Ejecutar localmente
@@ -24,7 +24,7 @@ Abrir `http://localhost:3000`.
 
 Rutas principales:
 
-- `/` dashboard privado demo
+- `/` dashboard privado protegido por Supabase Auth
 - `/businesses` configuracion de negocios y FAQs
 - `/conversations` conversaciones recientes
 - `/appointments` solicitudes de cita
@@ -40,11 +40,16 @@ Copia `.env.example` a `.env.local` si vas a conectar servicios reales.
 OPENAI_API_KEY=
 OPENAI_MODEL=gpt-4o-mini
 NEXT_PUBLIC_SUPABASE_URL=
-NEXT_PUBLIC_SUPABASE_ANON_KEY=
-SUPABASE_SERVICE_ROLE_KEY=
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=
 ```
 
 Sin `OPENAI_API_KEY`, el chat usa un fallback determinista con FAQs, reglas e intencion detectada. Esto permite probar el MVP sin costo ni llaves.
+
+El proyecto Supabase creado para este MVP es:
+
+```text
+https://psyqztntvnrbdbyckgip.supabase.co
+```
 
 ## Base de datos
 
@@ -65,7 +70,17 @@ Tablas incluidas:
 - `appointment_requests`
 - `quotes`
 
-El MVP actual usa datos seed en memoria para ser ejecutable inmediatamente. La capa Supabase esta aislada en `src/lib/supabase.ts` para reemplazar el store demo por queries reales.
+La migracion ya fue aplicada al proyecto Supabase real. El dashboard usa queries reales con RLS y el chat publico inserta leads desde la publishable key.
+
+Al registrarte e iniciar sesion, si el dashboard no tiene datos, usa **Cargar demo** para crear:
+
+- Clinica Sonrisa Clara
+- FixPro Tecnicos
+- FAQs
+- Clientes
+- Conversaciones
+- Solicitudes de cita
+- Cotizaciones
 
 ## IA
 

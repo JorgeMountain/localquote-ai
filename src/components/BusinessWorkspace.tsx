@@ -2,6 +2,7 @@
 
 import { Plus, Save } from "lucide-react";
 import { useMemo, useState } from "react";
+import { createFaq, updateBusiness } from "@/app/actions";
 import type { Business, BusinessFaq } from "@/lib/types";
 
 export function BusinessWorkspace({
@@ -20,11 +21,12 @@ export function BusinessWorkspace({
 
   return (
     <div className="grid gap-6 xl:grid-cols-[0.85fr_1.15fr]">
-      <section className="rounded-md border border-black/10 bg-white p-5">
+      <form key={selectedBusiness.id} action={updateBusiness} className="rounded-md border border-black/10 bg-white p-5">
+        <input type="hidden" name="id" value={selectedBusiness.id} />
         <div className="flex items-center justify-between gap-3">
           <div>
             <h2 className="text-xl font-semibold">Configuracion del negocio</h2>
-            <p className="text-sm text-[#706d62]">Demo editable en frontend; Supabase queda documentado.</p>
+            <p className="text-sm text-[#706d62]">Los cambios se guardan en Supabase con RLS por propietario.</p>
           </div>
           <button className="flex size-10 items-center justify-center rounded-md bg-black text-white" aria-label="Guardar">
             <Save size={17} />
@@ -44,15 +46,15 @@ export function BusinessWorkspace({
         </select>
 
         <div className="mt-5 grid gap-4">
-          <Field label="Nombre" defaultValue={selectedBusiness.name} />
-          <Field label="Descripcion" defaultValue={selectedBusiness.description} textarea />
-          <Field label="Servicios" defaultValue={selectedBusiness.services.join(", ")} />
-          <Field label="Horarios" defaultValue={selectedBusiness.hours} />
-          <Field label="Direccion o cobertura" defaultValue={selectedBusiness.location} />
-          <Field label="Telefono/WhatsApp" defaultValue={selectedBusiness.phone} />
-          <Field label="Reglas importantes" defaultValue={selectedBusiness.rules.join("\n")} textarea />
+          <Field name="name" label="Nombre" defaultValue={selectedBusiness.name} />
+          <Field name="description" label="Descripcion" defaultValue={selectedBusiness.description} textarea />
+          <Field name="services" label="Servicios" defaultValue={selectedBusiness.services.join(", ")} />
+          <Field name="hours" label="Horarios" defaultValue={selectedBusiness.hours} />
+          <Field name="location" label="Direccion o cobertura" defaultValue={selectedBusiness.location} />
+          <Field name="phone" label="Telefono/WhatsApp" defaultValue={selectedBusiness.phone} />
+          <Field name="rules" label="Reglas importantes" defaultValue={selectedBusiness.rules.join("\n")} textarea />
         </div>
-      </section>
+      </form>
 
       <section className="rounded-md border border-black/10 bg-white p-5">
         <div className="flex items-center justify-between gap-3">
@@ -65,6 +67,31 @@ export function BusinessWorkspace({
             FAQ
           </button>
         </div>
+
+        <form action={createFaq} className="mt-5 grid gap-3 rounded-md border border-black/10 bg-[#f8f6f1] p-4">
+          <input type="hidden" name="business_id" value={selectedBusiness.id} />
+          <input
+            className="h-11 rounded-md border border-black/15 bg-white px-3 text-sm outline-none focus:border-black"
+            name="question"
+            placeholder="Nueva pregunta"
+            required
+          />
+          <textarea
+            className="min-h-24 rounded-md border border-black/15 bg-white px-3 py-2 text-sm leading-6 outline-none focus:border-black"
+            name="answer"
+            placeholder="Respuesta aprobada por el negocio"
+            required
+          />
+          <input
+            className="h-11 rounded-md border border-black/15 bg-white px-3 text-sm outline-none focus:border-black"
+            name="category"
+            placeholder="Categoria opcional"
+          />
+          <button className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-black px-3 text-sm font-semibold text-white">
+            <Plus size={16} />
+            Crear FAQ
+          </button>
+        </form>
 
         <div className="mt-5 space-y-3">
           {businessFaqs.map((faq) => (
@@ -83,10 +110,12 @@ export function BusinessWorkspace({
 }
 
 function Field({
+  name,
   label,
   defaultValue,
   textarea,
 }: {
+  name: string;
   label: string;
   defaultValue: string;
   textarea?: boolean;
@@ -96,11 +125,13 @@ function Field({
       {label}
       {textarea ? (
         <textarea
+          name={name}
           className="min-h-24 rounded-md border border-black/15 bg-[#f8f6f1] px-3 py-2 font-normal leading-6 outline-none focus:border-black"
           defaultValue={defaultValue}
         />
       ) : (
         <input
+          name={name}
           className="h-11 rounded-md border border-black/15 bg-[#f8f6f1] px-3 font-normal outline-none focus:border-black"
           defaultValue={defaultValue}
         />

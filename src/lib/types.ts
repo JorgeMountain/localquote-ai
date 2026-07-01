@@ -82,10 +82,12 @@ export type ChatRequest = {
   customerPhone: string;
   message: string;
   conversationId?: string;
+  customerId?: string;
 };
 
 export type ChatResponse = {
   conversationId: string;
+  customerId: string;
   reply: string;
   intent: Conversation["lastIntent"];
   quote?: Quote;

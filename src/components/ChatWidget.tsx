@@ -15,6 +15,7 @@ export function ChatWidget({ business }: { business: Business }) {
   const [customerPhone, setCustomerPhone] = useState("");
   const [message, setMessage] = useState("");
   const [conversationId, setConversationId] = useState<string>();
+  const [customerId, setCustomerId] = useState<string>();
   const [messages, setMessages] = useState<UiMessage[]>([
     {
       role: "assistant",
@@ -42,11 +43,25 @@ export function ChatWidget({ business }: { business: Business }) {
         customerPhone,
         message: customerMessage,
         conversationId,
+        customerId,
       }),
     });
 
-    const data = (await response.json()) as ChatResponse;
+    const data = (await response.json()) as ChatResponse & { error?: string };
+    if (!response.ok) {
+      setMessages((current) => [
+        ...current,
+        {
+          role: "assistant",
+          body: data.error ?? "No pude guardar el mensaje. Intentalo de nuevo.",
+        },
+      ]);
+      setIsSending(false);
+      return;
+    }
+
     setConversationId(data.conversationId);
+    setCustomerId(data.customerId);
     setLastResponse(data);
     setMessages((current) => [...current, { role: "assistant", body: data.reply }]);
     setIsSending(false);

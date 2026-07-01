@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { ChatWidget } from "@/components/ChatWidget";
-import { getBusinessBySlug } from "@/lib/store";
+import { getPublicBusiness } from "@/lib/db";
+import { createAnonRouteClient } from "@/lib/supabase/route";
 
 export default async function PublicBusinessChatPage({
   params,
@@ -8,7 +9,7 @@ export default async function PublicBusinessChatPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const business = getBusinessBySlug(slug);
+  const business = await getPublicBusiness(createAnonRouteClient(), slug);
 
   if (!business) {
     notFound();
