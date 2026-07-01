@@ -2,6 +2,7 @@ import { CalendarClock, FileText, MessageSquareText, UsersRound } from "lucide-r
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AppShell } from "@/components/AppShell";
+import { BusinessFilter } from "@/components/BusinessFilter";
 import { MetricCard } from "@/components/MetricCard";
 import { OnboardingPanel } from "@/components/OnboardingPanel";
 import { StatusBadge } from "@/components/StatusBadge";
@@ -9,7 +10,11 @@ import { currencyCop, shortDate } from "@/lib/format";
 import { getDashboardData } from "@/lib/db";
 import { createClient } from "@/lib/supabase/server";
 
-export default async function DashboardPage() {
+type DashboardPageProps = {
+  searchParams?: Promise<{ business?: string }>;
+};
+
+export default async function DashboardPage({ searchParams }: DashboardPageProps) {
   const supabase = await createClient();
   const {
     data: { user },
@@ -17,8 +22,23 @@ export default async function DashboardPage() {
 
   if (!user) redirect("/login");
 
+  const params = await searchParams;
   const data = await getDashboardData(supabase, user.id);
-  const totalQuoted = data.quotes.reduce((sum, quote) => sum + quote.maxPrice, 0);
+  const activeBusinessId = data.businesses.some((business) => business.id === params?.business)
+    ? params?.business
+    : undefined;
+  const scopedBusinesses = activeBusinessId
+    ? data.businesses.filter((business) => business.id === activeBusinessId)
+    : data.businesses;
+  const scopedCustomers = data.customers.filter((customer) => !activeBusinessId || customer.businessId === activeBusinessId);
+  const scopedConversations = data.conversations.filter(
+    (conversation) => !activeBusinessId || conversation.businessId === activeBusinessId,
+  );
+  const scopedAppointments = data.appointmentRequests.filter(
+    (appointment) => !activeBusinessId || appointment.businessId === activeBusinessId,
+  );
+  const scopedQuotes = data.quotes.filter((quote) => !activeBusinessId || quote.businessId === activeBusinessId);
+  const totalQuoted = scopedQuotes.reduce((sum, quote) => sum + quote.maxPrice, 0);
 
   return (
     <AppShell>
@@ -43,22 +63,26 @@ export default async function DashboardPage() {
             </Link>
           </header>
 
+          <div className="mt-5">
+            <BusinessFilter businesses={data.businesses} activeBusinessId={activeBusinessId} basePath="/" />
+          </div>
+
           <section className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <MetricCard
               label="Clientes nuevos"
-              value={String(data.customers.length)}
+              value={String(scopedCustomers.length)}
               detail="Capturados desde chat web y Supabase."
               icon={UsersRound}
             />
             <MetricCard
               label="Conversaciones"
-              value={String(data.conversations.length)}
+              value={String(scopedConversations.length)}
               detail="Historial por negocio y canal."
               icon={MessageSquareText}
             />
             <MetricCard
               label="Citas pendientes"
-              value={String(data.appointmentRequests.filter((item) => item.status === "pending").length)}
+              value={String(scopedAppointments.filter((item) => item.status === "pending").length)}
               detail="Sin calendario externo en esta fase."
               icon={CalendarClock}
             />
@@ -90,7 +114,7 @@ export default async function DashboardPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-black/10">
-                    {data.conversations.map((conversation) => {
+                    {scopedConversations.map((conversation) => {
                       const customer = data.customers.find((item) => item.id === conversation.customerId);
                       const business = data.businesses.find((item) => item.id === conversation.businessId);
                       return (
@@ -105,6 +129,13 @@ export default async function DashboardPage() {
                         </tr>
                       );
                     })}
+                    {scopedConversations.length === 0 && (
+                      <tr>
+                        <td className="py-6 text-[#706d62]" colSpan={5}>
+                          Sin conversaciones para este filtro.
+                        </td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -113,7 +144,7 @@ export default async function DashboardPage() {
             <div className="rounded-md border border-black/10 bg-[#111111] p-5 text-white">
               <h2 className="text-xl font-semibold">Negocios activos</h2>
               <div className="mt-5 space-y-4">
-                {data.businesses.map((business) => (
+                {scopedBusinesses.map((business) => (
                   <article key={business.id} className="rounded-md border border-white/10 bg-white/5 p-4">
                     <div className="flex items-start justify-between gap-3">
                       <div>

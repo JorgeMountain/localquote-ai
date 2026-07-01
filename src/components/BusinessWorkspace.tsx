@@ -1,8 +1,16 @@
 "use client";
 
 import { Plus, Save, Trash2 } from "lucide-react";
-import { useMemo, useState } from "react";
-import { createBusiness, createFaq, deleteFaq, updateBusiness, updateFaq } from "@/app/actions";
+import { useActionState, useMemo, useState } from "react";
+import { useFormStatus } from "react-dom";
+import {
+  createBusinessWithFeedback,
+  createFaqWithFeedback,
+  deleteFaqWithFeedback,
+  updateBusinessWithFeedback,
+  updateFaqWithFeedback,
+} from "@/app/actions";
+import { ActionMessage } from "@/components/ActionForms";
 import type { Business, BusinessFaq } from "@/lib/types";
 
 export function BusinessWorkspace({
@@ -14,6 +22,7 @@ export function BusinessWorkspace({
 }) {
   const [selectedId, setSelectedId] = useState(businesses[0]?.id ?? "");
   const selectedBusiness = businesses.find((business) => business.id === selectedId) ?? businesses[0];
+  const [businessState, businessAction] = useActionState(updateBusinessWithFeedback, null);
   const businessFaqs = useMemo(
     () => (selectedBusiness ? faqs.filter((faq) => faq.businessId === selectedBusiness.id) : []),
     [faqs, selectedBusiness],
@@ -25,16 +34,17 @@ export function BusinessWorkspace({
 
       {selectedBusiness ? (
         <div className="grid gap-6 xl:grid-cols-[0.85fr_1.15fr]">
-          <form key={selectedBusiness.id} action={updateBusiness} className="rounded-md border border-black/10 bg-white p-5">
+          <form key={selectedBusiness.id} action={businessAction} className="rounded-md border border-black/10 bg-white p-5">
             <input type="hidden" name="id" value={selectedBusiness.id} />
             <div className="flex items-center justify-between gap-3">
               <div>
                 <h2 className="text-xl font-semibold">Configuracion del negocio</h2>
                 <p className="text-sm text-[#706d62]">Los cambios se guardan en Supabase con RLS por propietario.</p>
               </div>
-              <button className="flex size-10 items-center justify-center rounded-md bg-black text-white" aria-label="Guardar">
-                <Save size={17} />
-              </button>
+              <IconSubmitButton label="Guardar negocio" />
+            </div>
+            <div className="mt-4">
+              <ActionMessage state={businessState} />
             </div>
 
             <select
@@ -66,67 +76,11 @@ export function BusinessWorkspace({
               <p className="text-sm text-[#706d62]">Fuente principal para las respuestas IA.</p>
             </div>
 
-            <form action={createFaq} className="mt-5 grid gap-3 rounded-md border border-black/10 bg-[#f8f6f1] p-4">
-              <input type="hidden" name="business_id" value={selectedBusiness.id} />
-              <input
-                className="h-11 rounded-md border border-black/15 bg-white px-3 text-sm outline-none focus:border-black"
-                name="question"
-                placeholder="Nueva pregunta"
-                required
-              />
-              <textarea
-                className="min-h-24 rounded-md border border-black/15 bg-white px-3 py-2 text-sm leading-6 outline-none focus:border-black"
-                name="answer"
-                placeholder="Respuesta aprobada por el negocio"
-                required
-              />
-              <input
-                className="h-11 rounded-md border border-black/15 bg-white px-3 text-sm outline-none focus:border-black"
-                name="category"
-                placeholder="Categoria opcional"
-              />
-              <button className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-black px-3 text-sm font-semibold text-white">
-                <Plus size={16} />
-                Crear FAQ
-              </button>
-            </form>
+            <CreateFaqForm businessId={selectedBusiness.id} />
 
             <div className="mt-5 space-y-3">
               {businessFaqs.map((faq) => (
-                <article key={faq.id} className="rounded-md border border-black/10 bg-[#f8f6f1] p-4">
-                  <form action={updateFaq} className="grid gap-3">
-                    <input type="hidden" name="id" value={faq.id} />
-                    <input
-                      className="h-10 rounded-md border border-black/15 bg-white px-3 text-sm font-semibold outline-none focus:border-black"
-                      name="question"
-                      defaultValue={faq.question}
-                    />
-                    <textarea
-                      className="min-h-20 rounded-md border border-black/15 bg-white px-3 py-2 text-sm leading-6 outline-none focus:border-black"
-                      name="answer"
-                      defaultValue={faq.answer}
-                    />
-                    <input
-                      className="h-10 rounded-md border border-black/15 bg-white px-3 text-sm outline-none focus:border-black"
-                      name="category"
-                      defaultValue={faq.category ?? ""}
-                      placeholder="Categoria"
-                    />
-                    <div className="flex flex-wrap gap-2">
-                      <button className="inline-flex h-9 items-center gap-2 rounded-md bg-black px-3 text-sm font-semibold text-white">
-                        <Save size={15} />
-                        Guardar FAQ
-                      </button>
-                    </div>
-                  </form>
-                  <form action={deleteFaq} className="mt-2">
-                    <input type="hidden" name="id" value={faq.id} />
-                    <button className="inline-flex h-9 items-center gap-2 rounded-md border border-black/15 bg-white px-3 text-sm font-semibold">
-                      <Trash2 size={15} />
-                      Eliminar
-                    </button>
-                  </form>
-                </article>
+                <FaqEditor key={faq.id} faq={faq} />
               ))}
             </div>
           </section>
@@ -144,8 +98,10 @@ export function BusinessWorkspace({
 }
 
 function CreateBusinessForm() {
+  const [state, formAction] = useActionState(createBusinessWithFeedback, null);
+
   return (
-    <form action={createBusiness} className="rounded-md border border-black/10 bg-[#111111] p-5 text-white">
+    <form action={formAction} className="rounded-md border border-black/10 bg-[#111111] p-5 text-white">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <h2 className="text-xl font-semibold">Crear negocio</h2>
@@ -155,6 +111,10 @@ function CreateBusinessForm() {
           <Plus size={16} />
           Crear
         </button>
+      </div>
+
+      <div className="mt-4">
+        <ActionMessage state={state} />
       </div>
 
       <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -172,6 +132,102 @@ function CreateBusinessForm() {
         <textarea className="min-h-20 rounded-md border border-white/15 bg-white px-3 py-2 text-sm text-black" name="rules" placeholder="Reglas, precios base, politicas" required />
       </div>
     </form>
+  );
+}
+
+function CreateFaqForm({ businessId }: { businessId: string }) {
+  const [state, formAction] = useActionState(createFaqWithFeedback, null);
+
+  return (
+    <form action={formAction} className="mt-5 grid gap-3 rounded-md border border-black/10 bg-[#f8f6f1] p-4">
+      <input type="hidden" name="business_id" value={businessId} />
+      <input
+        className="h-11 rounded-md border border-black/15 bg-white px-3 text-sm outline-none focus:border-black"
+        name="question"
+        placeholder="Nueva pregunta"
+        required
+      />
+      <textarea
+        className="min-h-24 rounded-md border border-black/15 bg-white px-3 py-2 text-sm leading-6 outline-none focus:border-black"
+        name="answer"
+        placeholder="Respuesta aprobada por el negocio"
+        required
+      />
+      <input
+        className="h-11 rounded-md border border-black/15 bg-white px-3 text-sm outline-none focus:border-black"
+        name="category"
+        placeholder="Categoria opcional"
+      />
+      <div className="flex flex-wrap items-center gap-3">
+        <button className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-black px-3 text-sm font-semibold text-white">
+          <Plus size={16} />
+          Crear FAQ
+        </button>
+        <ActionMessage state={state} />
+      </div>
+    </form>
+  );
+}
+
+function FaqEditor({ faq }: { faq: BusinessFaq }) {
+  const [updateState, updateAction] = useActionState(updateFaqWithFeedback, null);
+  const [deleteState, deleteAction] = useActionState(deleteFaqWithFeedback, null);
+
+  return (
+    <article className="rounded-md border border-black/10 bg-[#f8f6f1] p-4">
+      <form action={updateAction} className="grid gap-3">
+        <input type="hidden" name="id" value={faq.id} />
+        <input
+          className="h-10 rounded-md border border-black/15 bg-white px-3 text-sm font-semibold outline-none focus:border-black"
+          name="question"
+          defaultValue={faq.question}
+        />
+        <textarea
+          className="min-h-20 rounded-md border border-black/15 bg-white px-3 py-2 text-sm leading-6 outline-none focus:border-black"
+          name="answer"
+          defaultValue={faq.answer}
+        />
+        <input
+          className="h-10 rounded-md border border-black/15 bg-white px-3 text-sm outline-none focus:border-black"
+          name="category"
+          defaultValue={faq.category ?? ""}
+          placeholder="Categoria"
+        />
+        <div className="flex flex-wrap items-center gap-2">
+          <button className="inline-flex h-9 items-center gap-2 rounded-md bg-black px-3 text-sm font-semibold text-white">
+            <Save size={15} />
+            Guardar FAQ
+          </button>
+          <ActionMessage state={updateState} compact />
+        </div>
+      </form>
+      <form action={deleteAction} className="mt-2 flex flex-wrap items-center gap-2">
+        <input type="hidden" name="id" value={faq.id} />
+        <button className="inline-flex h-9 items-center gap-2 rounded-md border border-black/15 bg-white px-3 text-sm font-semibold">
+          <Trash2 size={15} />
+          Eliminar
+        </button>
+        <ActionMessage state={deleteState} compact />
+      </form>
+    </article>
+  );
+}
+
+function IconSubmitButton({ label }: { label: string }) {
+  const { pending } = useFormStatus();
+
+  return (
+    <button
+      className="flex size-10 items-center justify-center rounded-md bg-black text-white disabled:cursor-not-allowed disabled:opacity-60"
+      aria-label={label}
+      disabled={pending}
+    >
+      {pending ? (
+        <span className="size-4 rounded-full border-2 border-white/40 border-t-white" />
+      ) : (
+        <Save size={17} />
+      )}
+    </button>
   );
 }
 

@@ -6,6 +6,11 @@ import { businesses, faqs } from "@/lib/seed";
 import { createClient } from "@/lib/supabase/server";
 import type { AppointmentStatus, BusinessType, LeadStatus, QuoteStatus } from "@/lib/types";
 
+export type ActionState = {
+  status: "success" | "error";
+  message: string;
+} | null;
+
 export async function seedDemoData() {
   const supabase = await createClient();
   const {
@@ -121,6 +126,14 @@ export async function signOut() {
 }
 
 export async function updateBusiness(formData: FormData) {
+  await updateBusinessCore(formData);
+}
+
+export async function updateBusinessWithFeedback(_state: ActionState, formData: FormData): Promise<ActionState> {
+  return withFeedback(() => updateBusinessCore(formData), "Negocio actualizado.");
+}
+
+async function updateBusinessCore(formData: FormData) {
   const supabase = await createClient();
   const {
     data: { user },
@@ -152,6 +165,14 @@ export async function updateBusiness(formData: FormData) {
 }
 
 export async function createBusiness(formData: FormData) {
+  await createBusinessCore(formData);
+}
+
+export async function createBusinessWithFeedback(_state: ActionState, formData: FormData): Promise<ActionState> {
+  return withFeedback(() => createBusinessCore(formData), "Negocio creado.");
+}
+
+async function createBusinessCore(formData: FormData) {
   const supabase = await createClient();
   const {
     data: { user },
@@ -183,6 +204,14 @@ export async function createBusiness(formData: FormData) {
 }
 
 export async function createFaq(formData: FormData) {
+  await createFaqCore(formData);
+}
+
+export async function createFaqWithFeedback(_state: ActionState, formData: FormData): Promise<ActionState> {
+  return withFeedback(() => createFaqCore(formData), "FAQ creada.");
+}
+
+async function createFaqCore(formData: FormData) {
   const supabase = await createClient();
   const {
     data: { user },
@@ -202,6 +231,14 @@ export async function createFaq(formData: FormData) {
 }
 
 export async function updateFaq(formData: FormData) {
+  await updateFaqCore(formData);
+}
+
+export async function updateFaqWithFeedback(_state: ActionState, formData: FormData): Promise<ActionState> {
+  return withFeedback(() => updateFaqCore(formData), "FAQ actualizada.");
+}
+
+async function updateFaqCore(formData: FormData) {
   const supabase = await createClient();
   const {
     data: { user },
@@ -223,6 +260,14 @@ export async function updateFaq(formData: FormData) {
 }
 
 export async function deleteFaq(formData: FormData) {
+  await deleteFaqCore(formData);
+}
+
+export async function deleteFaqWithFeedback(_state: ActionState, formData: FormData): Promise<ActionState> {
+  return withFeedback(() => deleteFaqCore(formData), "FAQ eliminada.");
+}
+
+async function deleteFaqCore(formData: FormData) {
   const supabase = await createClient();
   const {
     data: { user },
@@ -237,6 +282,23 @@ export async function deleteFaq(formData: FormData) {
 }
 
 export async function updateAppointmentStatus(formData: FormData) {
+  await updateAppointmentStatusCore(formData);
+}
+
+export async function updateAppointmentStatusWithFeedback(
+  _state: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const status = parseAppointmentStatus(String(formData.get("status") ?? ""));
+  const labels: Record<AppointmentStatus, string> = {
+    pending: "Cita marcada como pendiente.",
+    confirmed: "Cita confirmada.",
+    cancelled: "Cita cancelada.",
+  };
+  return withFeedback(() => updateAppointmentStatusCore(formData), labels[status]);
+}
+
+async function updateAppointmentStatusCore(formData: FormData) {
   const supabase = await createClient();
   const {
     data: { user },
@@ -248,14 +310,32 @@ export async function updateAppointmentStatus(formData: FormData) {
   const { error } = await supabase
     .from("appointment_requests")
     .update({ status })
-    .eq("id", String(formData.get("id") ?? ""));
+    .eq("id", String(formData.get("id") ?? ""))
+    .select("id")
+    .single();
 
   if (error) throw error;
   revalidatePath("/");
   revalidatePath("/appointments");
+  revalidatePath("/conversations");
 }
 
 export async function updateQuoteStatus(formData: FormData) {
+  await updateQuoteStatusCore(formData);
+}
+
+export async function updateQuoteStatusWithFeedback(_state: ActionState, formData: FormData): Promise<ActionState> {
+  const status = parseQuoteStatus(String(formData.get("status") ?? ""));
+  const labels: Record<QuoteStatus, string> = {
+    draft: "Cotizacion marcada como borrador.",
+    sent: "Cotizacion enviada.",
+    accepted: "Cotizacion aceptada.",
+    rejected: "Cotizacion rechazada.",
+  };
+  return withFeedback(() => updateQuoteStatusCore(formData), labels[status]);
+}
+
+async function updateQuoteStatusCore(formData: FormData) {
   const supabase = await createClient();
   const {
     data: { user },
@@ -264,14 +344,35 @@ export async function updateQuoteStatus(formData: FormData) {
   if (!user) redirect("/login");
 
   const status = parseQuoteStatus(String(formData.get("status") ?? ""));
-  const { error } = await supabase.from("quotes").update({ status }).eq("id", String(formData.get("id") ?? ""));
+  const { error } = await supabase
+    .from("quotes")
+    .update({ status })
+    .eq("id", String(formData.get("id") ?? ""))
+    .select("id")
+    .single();
 
   if (error) throw error;
   revalidatePath("/");
   revalidatePath("/quotes");
+  revalidatePath("/conversations");
 }
 
 export async function updateCustomerStatus(formData: FormData) {
+  await updateCustomerStatusCore(formData);
+}
+
+export async function updateCustomerStatusWithFeedback(_state: ActionState, formData: FormData): Promise<ActionState> {
+  const status = parseLeadStatus(String(formData.get("status") ?? ""));
+  const labels: Record<LeadStatus, string> = {
+    new: "Lead marcado como nuevo.",
+    qualified: "Lead calificado.",
+    appointment: "Lead marcado con cita.",
+    quoted: "Lead marcado como cotizado.",
+  };
+  return withFeedback(() => updateCustomerStatusCore(formData), labels[status]);
+}
+
+async function updateCustomerStatusCore(formData: FormData) {
   const supabase = await createClient();
   const {
     data: { user },
@@ -280,11 +381,28 @@ export async function updateCustomerStatus(formData: FormData) {
   if (!user) redirect("/login");
 
   const status = parseLeadStatus(String(formData.get("status") ?? ""));
-  const { error } = await supabase.from("customers").update({ status }).eq("id", String(formData.get("id") ?? ""));
+  const { error } = await supabase
+    .from("customers")
+    .update({ status })
+    .eq("id", String(formData.get("id") ?? ""))
+    .select("id")
+    .single();
 
   if (error) throw error;
   revalidatePath("/");
   revalidatePath("/conversations");
+}
+
+async function withFeedback(action: () => Promise<void>, successMessage: string): Promise<ActionState> {
+  try {
+    await action();
+    return { status: "success", message: successMessage };
+  } catch (error) {
+    return {
+      status: "error",
+      message: error instanceof Error ? error.message : "No se pudo guardar el cambio.",
+    };
+  }
 }
 
 async function createDemoLead(
