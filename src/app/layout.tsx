@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "LocalQuote AI",
-  description: "AI assistant MVP for local businesses, quotes, appointments and lead capture.",
+  title: "ClienteListo",
+  description: "MVP para negocios locales: captura leads, agenda citas y gestiona cotizaciones.",
 };
 
 export default function RootLayout({

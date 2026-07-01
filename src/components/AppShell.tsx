@@ -26,7 +26,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <Bot size={20} />
           </span>
           <span>
-            <span className="block text-lg font-semibold">LocalQuote AI</span>
+            <span className="block text-lg font-semibold">ClienteListo</span>
             <span className="text-xs uppercase tracking-[0.22em] text-[#6f6b61]">
               SaaS local
             </span>

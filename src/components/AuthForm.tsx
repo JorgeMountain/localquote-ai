@@ -8,9 +8,9 @@ import { createClient } from "@/lib/supabase/client";
 export function AuthForm() {
   const router = useRouter();
   const [mode, setMode] = useState<"login" | "register">("login");
-  const [email, setEmail] = useState("owner@localquote.ai");
-  const [password, setPassword] = useState("localquote-demo-2026");
-  const [fullName, setFullName] = useState("Duenio LocalQuote");
+  const [email, setEmail] = useState("owner@clientelisto.app");
+  const [password, setPassword] = useState("clientelisto-demo-2026");
+  const [fullName, setFullName] = useState("Duenio ClienteListo");
   const [message, setMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
