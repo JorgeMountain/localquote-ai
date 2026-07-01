@@ -1,4 +1,4 @@
-# ClienteListo
+# Tactio
 
 MVP de una plataforma SaaS para negocios locales. El producto permite configurar negocios, cargar FAQs, capturar leads desde un chat publico, responder con IA basada en datos del negocio, generar solicitudes de cita y crear cotizaciones estimadas.
 

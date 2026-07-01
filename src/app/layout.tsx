@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "ClienteListo",
+  title: "Tactio",
   description: "MVP para negocios locales: captura leads, agenda citas y gestiona cotizaciones.",
 };
 
