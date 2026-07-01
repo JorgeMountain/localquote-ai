@@ -1,0 +1,229 @@
+TACTIO - CONTEXTO PARA CONTINUAR DESDE OTRO PC
+Fecha: 2026-07-01
+
+RESUMEN
+Tactio es un MVP SaaS para negocios locales. Permite configurar negocios, cargar FAQs,
+capturar leads desde un chat publico, guardar conversaciones en Supabase, crear solicitudes
+de cita, crear cotizaciones estimadas y gestionar estados desde un dashboard privado.
+
+Si trabajas desde otro PC con Codex, si: puedes continuar clonando el repositorio. Para
+desarrollo normal solo necesitas Node.js, npm install y ejecutar el proyecto. Para deploy,
+DB admin o cambios en Supabase/Vercel necesitas autenticar GitHub/Vercel/Supabase en ese PC.
+
+REPOSITORIO
+GitHub:
+https://github.com/JorgeMountain/localquote-ai
+
+Branch principal:
+master
+
+Ultimos commits importantes:
+- 5405884 Rename product to Tactio
+- 652d194 Improve commercial dashboard UX
+- 6a38445 Ignored .vercel metadata
+
+Comandos para empezar desde otro PC:
+git clone https://github.com/JorgeMountain/localquote-ai.git
+cd localquote-ai
+npm install
+npm run dev
+
+Validacion local:
+npm run lint
+npm run build
+
+URL local esperada:
+http://localhost:3000
+
+PRODUCCION
+Vercel project:
+jorges-projects-deb6668f/localquote-ai
+
+URL publica actual:
+https://localquote-ai.vercel.app
+
+Ultimo deploy verificado:
+La produccion muestra la marca Tactio en /login.
+
+Nota:
+La URL/proyecto Vercel todavia dice localquote-ai. La marca visible ya es Tactio.
+Pendiente opcional: cambiar dominio a algo como tactio.app o gettactio.com y luego
+renombrar proyecto/repo si se quiere consistencia total.
+
+SUPABASE
+Proyecto Supabase:
+psyqztntvnrbdbyckgip
+
+URL:
+https://psyqztntvnrbdbyckgip.supabase.co
+
+Publishable key usada por el frontend:
+sb_publishable_ZDVvzu7vBs48raJ-O_NaXg_QVi9V7yC
+
+Importante:
+No hay service_role key guardada en el repo. No exponer service_role en frontend.
+
+Migracion principal:
+supabase/migrations/001_initial_schema.sql
+
+Tablas principales:
+- profiles
+- businesses
+- business_faqs
+- customers
+- conversations
+- messages
+- appointment_requests
+- quotes
+
+RLS:
+La migracion habilita RLS y politicas para owner autenticado. El chat publico puede insertar
+leads/conversaciones/mensajes/citas/cotizaciones con restricciones basicas.
+
+Credenciales demo actuales:
+Email: owner@tactio.app
+Password: tactio-demo-2026
+
+Usuario demo Supabase:
+id: 22222222-2222-4222-8222-222222222222
+
+Negocios demo actuales:
+- /b/sonrisa-clara
+- /b/fixpro-tecnicos
+
+OPENAI
+No hay OpenAI API key configurada. Esto es intencional para evitar gasto.
+Sin OPENAI_API_KEY, el chat usa fallback determinista basado en FAQs, reglas y deteccion
+de intencion.
+
+Variables de entorno recomendadas en Vercel/local:
+NEXT_PUBLIC_SUPABASE_URL=https://psyqztntvnrbdbyckgip.supabase.co
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_ZDVvzu7vBs48raJ-O_NaXg_QVi9V7yC
+OPENAI_API_KEY=
+OPENAI_MODEL=gpt-4o-mini
+
+Nota:
+src/lib/supabase/env.ts tiene fallback hardcodeado de URL y publishable key para que el
+MVP funcione sin configurar env vars. Para produccion seria mejor mover todo a env vars.
+
+RUTAS PRINCIPALES
+Privadas:
+/                     Dashboard privado
+/businesses           Configuracion de negocios y FAQs
+/conversations        Leads, historial, detalle de conversacion y acciones rapidas
+/appointments         Solicitudes de cita y confirmacion rapida
+/quotes               Cotizaciones, enviar y marcar aceptada
+
+Publicas:
+/login                Login/registro Supabase Auth
+/b/sonrisa-clara      Chat publico demo odontologo
+/b/fixpro-tecnicos    Chat publico demo tecnico
+/api/chat             API del chat publico
+
+FUNCIONALIDAD YA IMPLEMENTADA
+- Auth con Supabase.
+- Dashboard protegido por sesion.
+- Negocios, FAQs, clientes, conversaciones, mensajes, citas y cotizaciones persistidos en Supabase.
+- /businesses crea/edita negocios y FAQs reales.
+- Chat publico guarda leads y mensajes.
+- Deteccion de intencion: FAQ, cotizacion, cita, handoff.
+- Cita se crea solo con datos minimos.
+- Cotizacion se crea solo con datos minimos.
+- Estados editables:
+  - Leads: new, qualified, appointment, quoted
+  - Citas: pending, confirmed, cancelled
+  - Cotizaciones: draft, sent, accepted, rejected
+- UX comercial:
+  - Mensajes de exito/error en formularios.
+  - Filtros por negocio en dashboard, conversaciones, citas y cotizaciones.
+  - Vista detalle de conversacion/lead.
+  - Botones rapidos: confirmar cita, enviar cotizacion, marcar aceptada.
+- Marca visible actual: Tactio.
+
+ARCHIVOS CLAVE
+src/app/actions.ts
+Server actions para seed, negocios, FAQs y cambios de estado.
+
+src/lib/db.ts
+Queries y mapeo de datos Supabase a tipos del frontend.
+
+src/lib/commercial.ts
+Logica comercial e intencion.
+
+src/lib/ai.ts
+OpenAI opcional y fallback determinista.
+
+src/app/api/chat/route.ts
+Endpoint del chat publico.
+
+src/components/BusinessWorkspace.tsx
+Formulario para negocios y FAQs.
+
+src/components/ActionForms.tsx
+Formularios con feedback y botones rapidos.
+
+src/components/BusinessFilter.tsx
+Filtro por negocio.
+
+src/components/AuthForm.tsx
+Login/registro y credenciales demo visibles.
+
+COSAS QUE FALTAN PARA MVP VENDIBLE
+Orden recomendado:
+1. Dominio y marca:
+   - Comprar/configurar dominio para Tactio.
+   - Cambiar alias de Vercel.
+   - Crear logo simple y favicon.
+
+2. Landing real:
+   - Pagina publica que explique Tactio.
+   - CTA: probar como cliente y entrar como dueno.
+   - Demos por sector.
+
+3. Onboarding:
+   - Flujo guiado para crear primer negocio.
+   - Evitar que parezca formulario tecnico.
+   - Plantillas por sector: odontologo, tecnico, taller, estetica.
+
+4. WhatsApp:
+   - Integrar Twilio o WhatsApp Business Cloud API.
+   - Reutilizar logica actual de /api/chat.
+   - Guardar mensajes igual que el chat web.
+
+5. Pagos:
+   - Stripe o MercadoPago.
+   - Plan simple mensual + prueba gratis.
+
+6. Produccion/seguridad:
+   - Quitar fallback hardcodeado de Supabase si se configura env real.
+   - Revisar RLS/advisors.
+   - Separar datos demo de datos reales.
+
+7. Dashboard:
+   - Busqueda por cliente/telefono.
+   - Metricas por semana/mes.
+   - Exportar leads CSV.
+   - Notas internas por lead.
+
+COMO CONTINUAR CON CODEX EN OTRO PC
+1. Clonar repo.
+2. Instalar dependencias.
+3. Ejecutar npm run dev.
+4. Login con owner@tactio.app / tactio-demo-2026.
+5. Para deploy:
+   - Instalar/login Vercel CLI si hace falta.
+   - npx vercel@latest --prod --yes --scope jorges-projects-deb6668f
+6. Para cambios de DB:
+   - Usar Supabase MCP o Supabase Dashboard.
+   - No usar service_role en cliente.
+   - Si se modifica schema, actualizar migracion o crear una nueva migracion.
+
+DECISIONES DE PRODUCTO TOMADAS
+- Nombre actual: Tactio.
+- No usar AI en la marca.
+- Enfocarse en negocios locales, no enterprise.
+- Inspiracion competitiva: empresas tipo Konecta trabajan CX enterprise; Tactio debe ser
+  version simple, barata y lista para usar para negocios locales.
+- OpenAI queda opcional hasta que haya monetizacion.
+- WhatsApp es probablemente el siguiente canal mas vendible.
+
