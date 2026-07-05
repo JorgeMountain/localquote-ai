@@ -1,5 +1,4 @@
 import OpenAI from "openai";
-import type { ChatCompletionCreateParamsNonStreaming } from "openai/resources/chat/completions";
 import { analyzeCommercialRequest } from "./commercial";
 import type { Business, BusinessFaq, Conversation, Message } from "./types";
 
@@ -9,14 +8,6 @@ type AiClientConfig = {
   client: OpenAI;
   model: string;
   provider: Exclude<AiProvider, "none">;
-};
-
-type ChatCompletionInput = ChatCompletionCreateParamsNonStreaming & {
-  extra_body?: {
-    thinking?: {
-      type: "enabled" | "disabled";
-    };
-  };
 };
 
 const clients: Partial<Record<Exclude<AiProvider, "none">, OpenAI>> = {};
@@ -107,7 +98,7 @@ export async function generateAssistantReply(input: {
 
   if (ai) {
     try {
-      const completionInput: ChatCompletionInput = {
+      const completion = await ai.client.chat.completions.create({
         model: ai.model,
         temperature: 0.2,
         stream: false,
@@ -122,9 +113,7 @@ export async function generateAssistantReply(input: {
           })),
           { role: "user", content: input.userMessage },
         ],
-        ...(ai.provider === "deepseek" ? { extra_body: { thinking: { type: "disabled" } } } : {}),
-      };
-      const completion = await ai.client.chat.completions.create(completionInput);
+      });
 
       return {
         intent,
