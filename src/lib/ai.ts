@@ -1,15 +1,71 @@
 import OpenAI from "openai";
+import type { ChatCompletionCreateParamsNonStreaming } from "openai/resources/chat/completions";
 import { analyzeCommercialRequest } from "./commercial";
 import type { Business, BusinessFaq, Conversation, Message } from "./types";
 
-let openaiClient: OpenAI | null = null;
+type AiProvider = "deepseek" | "openai" | "none";
 
-function getOpenAI() {
-  if (!process.env.OPENAI_API_KEY) return null;
-  if (!openaiClient) {
-    openaiClient = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+type AiClientConfig = {
+  client: OpenAI;
+  model: string;
+  provider: Exclude<AiProvider, "none">;
+};
+
+type ChatCompletionInput = ChatCompletionCreateParamsNonStreaming & {
+  extra_body?: {
+    thinking?: {
+      type: "enabled" | "disabled";
+    };
+  };
+};
+
+const clients: Partial<Record<Exclude<AiProvider, "none">, OpenAI>> = {};
+
+function getAiProvider(): AiProvider {
+  const configuredProvider = process.env.AI_PROVIDER?.toLowerCase();
+
+  if (configuredProvider === "deepseek" || configuredProvider === "openai" || configuredProvider === "none") {
+    return configuredProvider;
   }
-  return openaiClient;
+
+  if (process.env.DEEPSEEK_API_KEY) return "deepseek";
+  if (process.env.OPENAI_API_KEY) return "openai";
+  return "none";
+}
+
+function getAiClient(): AiClientConfig | null {
+  const provider = getAiProvider();
+
+  if (provider === "deepseek") {
+    if (!process.env.DEEPSEEK_API_KEY) return null;
+
+    const client =
+      clients.deepseek ??
+      (clients.deepseek = new OpenAI({
+        apiKey: process.env.DEEPSEEK_API_KEY,
+        baseURL: process.env.DEEPSEEK_BASE_URL ?? "https://api.deepseek.com",
+      }));
+
+    return {
+      client,
+      model: process.env.DEEPSEEK_MODEL ?? "deepseek-v4-flash",
+      provider,
+    };
+  }
+
+  if (provider === "openai") {
+    if (!process.env.OPENAI_API_KEY) return null;
+
+    const client = clients.openai ?? (clients.openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY }));
+
+    return {
+      client,
+      model: process.env.OPENAI_MODEL ?? "gpt-4o-mini",
+      provider,
+    };
+  }
+
+  return null;
 }
 
 export function detectIntent(text: string): Conversation["lastIntent"] {
@@ -47,34 +103,45 @@ export async function generateAssistantReply(input: {
   userMessage: string;
 }) {
   const intent = analyzeCommercialRequest(input.userMessage, input.business).intent;
-  const client = getOpenAI();
+  const ai = getAiClient();
 
-  if (client) {
-    const completion = await client.chat.completions.create({
-      model: process.env.OPENAI_MODEL ?? "gpt-4o-mini",
-      temperature: 0.2,
-      messages: [
-        {
-          role: "system",
-          content: buildSystemPrompt(input.business, input.faqs),
-        },
-        ...input.history.slice(-8).map((message) => ({
-          role: message.role === "assistant" ? "assistant" as const : "user" as const,
-          content: message.body,
-        })),
-        { role: "user", content: input.userMessage },
-      ],
-    });
+  if (ai) {
+    try {
+      const completionInput: ChatCompletionInput = {
+        model: ai.model,
+        temperature: 0.2,
+        stream: false,
+        messages: [
+          {
+            role: "system",
+            content: buildSystemPrompt(input.business, input.faqs),
+          },
+          ...input.history.slice(-8).map((message) => ({
+            role: message.role === "assistant" ? "assistant" as const : "user" as const,
+            content: message.body,
+          })),
+          { role: "user", content: input.userMessage },
+        ],
+        ...(ai.provider === "deepseek" ? { extra_body: { thinking: { type: "disabled" } } } : {}),
+      };
+      const completion = await ai.client.chat.completions.create(completionInput);
 
-    return {
-      intent,
-      reply:
-        completion.choices[0]?.message.content ??
-        "Necesito confirmar esa informacion con el negocio antes de responderte.",
-    };
+      return {
+        intent,
+        reply:
+          completion.choices[0]?.message.content ??
+          "Necesito confirmar esa informacion con el negocio antes de responderte.",
+      };
+    } catch (error) {
+      console.error("AI provider request failed. Using deterministic fallback.", error);
+    }
   }
 
-  const faq = relevantFaqReply(input.userMessage, input.faqs);
+  return generateFallbackReply(input.userMessage, input.faqs, intent);
+}
+
+function generateFallbackReply(userMessage: string, faqs: BusinessFaq[], intent: Conversation["lastIntent"]) {
+  const faq = relevantFaqReply(userMessage, faqs);
   if (faq) {
     return { intent, reply: `${faq.answer} Deseas que deje una solicitud para que el equipo te confirme?` };
   }

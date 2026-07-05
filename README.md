@@ -9,7 +9,7 @@ La primera pantalla es el dashboard operativo, no una landing page.
 - Next.js App Router
 - TypeScript
 - Tailwind CSS v4
-- OpenAI API opcional para respuestas IA
+- DeepSeek V4 Flash u OpenAI opcional para respuestas IA
 - Supabase real para base de datos y autenticacion
 - Adaptador `MessagingProvider` preparado para WhatsApp, con proveedor web activo en el MVP
 
@@ -37,13 +37,18 @@ Rutas principales:
 Copia `.env.example` a `.env.local` si vas a conectar servicios reales.
 
 ```bash
+AI_PROVIDER=deepseek
+DEEPSEEK_API_KEY=
+DEEPSEEK_MODEL=deepseek-v4-flash
+DEEPSEEK_BASE_URL=https://api.deepseek.com
+
 OPENAI_API_KEY=
 OPENAI_MODEL=gpt-4o-mini
 NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=
 ```
 
-Sin `OPENAI_API_KEY`, el chat usa un fallback determinista con FAQs, reglas e intencion detectada. Esto permite probar el MVP sin costo ni llaves.
+`AI_PROVIDER` puede ser `deepseek`, `openai` o `none`. Si no hay `DEEPSEEK_API_KEY` ni `OPENAI_API_KEY`, el chat usa un fallback determinista con FAQs, reglas e intencion detectada. Esto permite probar el MVP sin costo ni llaves.
 
 El proyecto Supabase creado para este MVP es:
 
@@ -94,6 +99,14 @@ La ruta `POST /api/chat` construye respuestas con:
 - Reglas
 - FAQs
 - Historial reciente
+
+Por defecto, el proveedor recomendado es DeepSeek V4 Flash mediante API compatible con OpenAI. La llave debe guardarse solo en `.env.local`:
+
+```bash
+AI_PROVIDER=deepseek
+DEEPSEEK_API_KEY=tu_llave_deepseek
+DEEPSEEK_MODEL=deepseek-v4-flash
+```
 
 Regla clave: si falta informacion, el asistente debe pedir confirmacion del negocio y no inventar datos.
 
