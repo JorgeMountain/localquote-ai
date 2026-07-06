@@ -24,12 +24,25 @@ export function ChatWidget({ business }: { business: Business }) {
   ]);
   const [isSending, setIsSending] = useState(false);
   const [lastResponse, setLastResponse] = useState<ChatResponse | null>(null);
+  const [formError, setFormError] = useState("");
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!message.trim() || !customerName.trim() || !customerPhone.trim()) return;
 
     const customerMessage = message.trim();
+    if (!customerMessage) return;
+
+    const inferredName = customerName.trim() || inferCustomerName(customerMessage);
+    const inferredPhone = customerPhone.trim() || inferCustomerPhone(customerMessage);
+
+    if (!inferredName || !inferredPhone) {
+      setFormError("Completa nombre y telefono arriba, o incluyelos en el mensaje.");
+      return;
+    }
+
+    setFormError("");
+    setCustomerName(inferredName);
+    setCustomerPhone(inferredPhone);
     setMessages((current) => [...current, { role: "customer", body: customerMessage }]);
     setMessage("");
     setIsSending(true);
@@ -39,9 +52,10 @@ export function ChatWidget({ business }: { business: Business }) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         slug: business.slug,
-        customerName,
-        customerPhone,
+        customerName: inferredName,
+        customerPhone: inferredPhone,
         message: customerMessage,
+        history: messages.slice(-8),
         conversationId,
         customerId,
       }),
@@ -115,13 +129,19 @@ export function ChatWidget({ business }: { business: Business }) {
               className="h-11 rounded-md border border-black/15 bg-white px-3 text-sm outline-none focus:border-black"
               placeholder="Nombre del cliente"
               value={customerName}
-              onChange={(event) => setCustomerName(event.target.value)}
+              onChange={(event) => {
+                setCustomerName(event.target.value);
+                setFormError("");
+              }}
             />
             <input
               className="h-11 rounded-md border border-black/15 bg-white px-3 text-sm outline-none focus:border-black"
               placeholder="Telefono o WhatsApp"
               value={customerPhone}
-              onChange={(event) => setCustomerPhone(event.target.value)}
+              onChange={(event) => {
+                setCustomerPhone(event.target.value);
+                setFormError("");
+              }}
             />
           </div>
 
@@ -152,12 +172,21 @@ export function ChatWidget({ business }: { business: Business }) {
             </div>
           )}
 
+          {formError && (
+            <p className="mx-4 mb-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700" aria-live="polite">
+              {formError}
+            </p>
+          )}
+
           <form onSubmit={submit} className="flex gap-2 border-t border-black/10 p-4">
             <input
               className="h-12 flex-1 rounded-md border border-black/15 bg-white px-3 text-sm outline-none focus:border-black"
               placeholder="Escribe una pregunta, cita o cotizacion..."
               value={message}
-              onChange={(event) => setMessage(event.target.value)}
+              onChange={(event) => {
+                setMessage(event.target.value);
+                setFormError("");
+              }}
             />
             <button
               className="flex size-12 shrink-0 items-center justify-center rounded-md bg-black text-white transition hover:bg-[#2b2b2b] disabled:opacity-50"
@@ -171,4 +200,14 @@ export function ChatWidget({ business }: { business: Business }) {
       </div>
     </section>
   );
+}
+
+function inferCustomerName(message: string) {
+  const match = message.match(/\b(?:mi nombre es|me llamo|soy)\s+([^,.;\d]+)/i);
+  return match?.[1]?.trim().split(/\s+/).slice(0, 4).join(" ") || "Cliente web";
+}
+
+function inferCustomerPhone(message: string) {
+  const match = message.match(/(?:\+?\d[\d\s().-]{6,}\d)/);
+  return match?.[0]?.trim();
 }

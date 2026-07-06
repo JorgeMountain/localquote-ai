@@ -26,11 +26,30 @@ export async function POST(request: Request) {
   }
 
   const businessFaqs = await getPublicFaqs(supabase, business.id);
-  const analysis = analyzeCommercialRequest(input.message, business);
-  const hasDirectFaqAnswer = hasRelevantFaq(input.message, businessFaqs);
-  const effectiveIntent = hasDirectFaqAnswer ? "faq" : analysis.intent;
   const customerId = input.customerId ?? crypto.randomUUID();
   const conversationId = input.conversationId ?? crypto.randomUUID();
+  const history = (input.history ?? []).slice(-8).map((message) => ({
+    id: crypto.randomUUID(),
+    conversationId,
+    role: message.role,
+    body: message.body,
+    createdAt: new Date().toISOString(),
+  }));
+  const commercialContext = [...history.filter((message) => message.role === "customer").map((message) => message.body), input.message]
+    .slice(-6)
+    .join("\n");
+  const analysis = analyzeCommercialRequest(commercialContext, business);
+  const shouldUseFaqAnswer = analysis.intent === "faq" && hasRelevantFaq(input.message, businessFaqs);
+  const effectiveIntent = shouldUseFaqAnswer ? "faq" : analysis.intent;
+  const hasExistingAppointment = history.some(
+    (message) =>
+      message.role === "assistant" &&
+      message.body.toLowerCase().includes("solicitud de cita") &&
+      /registrad[ao]/i.test(message.body),
+  );
+  const hasExistingQuote = history.some(
+    (message) => message.role === "assistant" && message.body.toLowerCase().includes("cotizacion estimada"),
+  );
 
   if (!input.customerId) {
     const { error } = await supabase.from("customers").insert({
@@ -38,7 +57,7 @@ export async function POST(request: Request) {
       business_id: business.id,
       name: input.customerName,
       phone: input.customerPhone,
-      status: !hasDirectFaqAnswer && analysis.appointmentDraft ? "appointment" : !hasDirectFaqAnswer && analysis.quoteDraft ? "quoted" : "new",
+      status: analysis.appointmentDraft ? "appointment" : analysis.quoteDraft ? "quoted" : "new",
     });
 
     if (error) {
@@ -49,10 +68,18 @@ export async function POST(request: Request) {
   const ai = await generateAssistantReply({
     business,
     faqs: businessFaqs,
-    history: [],
+    history,
+    customerName: input.customerName,
+    customerPhone: input.customerPhone,
     userMessage: input.message,
   });
-  const reply = hasDirectFaqAnswer ? ai.reply : buildCommercialReply(ai.reply, analysis);
+  const shouldAppendCommercialReply =
+    !(hasExistingAppointment && analysis.appointmentDraft) && !(hasExistingQuote && analysis.quoteDraft);
+  const reply = shouldUseFaqAnswer
+    ? ai.reply
+    : shouldAppendCommercialReply
+      ? buildCommercialReply(ai.reply, analysis)
+      : ai.reply;
 
   if (!input.conversationId) {
     const { error } = await supabase.from("conversations").insert({
@@ -88,7 +115,7 @@ export async function POST(request: Request) {
   }
 
   const quote =
-    !hasDirectFaqAnswer && analysis.quoteDraft
+    analysis.quoteDraft && !hasExistingQuote
       ? {
           id: crypto.randomUUID(),
           businessId: business.id,
@@ -117,7 +144,7 @@ export async function POST(request: Request) {
   }
 
   const appointment =
-    !hasDirectFaqAnswer && analysis.appointmentDraft
+    analysis.appointmentDraft && !hasExistingAppointment
       ? {
           id: crypto.randomUUID(),
           businessId: business.id,

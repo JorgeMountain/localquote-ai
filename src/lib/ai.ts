@@ -91,6 +91,8 @@ export async function generateAssistantReply(input: {
   business: Business;
   faqs: BusinessFaq[];
   history: Message[];
+  customerName?: string;
+  customerPhone?: string;
   userMessage: string;
 }) {
   const intent = analyzeCommercialRequest(input.userMessage, input.business).intent;
@@ -105,7 +107,10 @@ export async function generateAssistantReply(input: {
         messages: [
           {
             role: "system",
-            content: buildSystemPrompt(input.business, input.faqs),
+            content: buildSystemPrompt(input.business, input.faqs, {
+              customerName: input.customerName,
+              customerPhone: input.customerPhone,
+            }),
           },
           ...input.history.slice(-8).map((message) => ({
             role: message.role === "assistant" ? "assistant" as const : "user" as const,
@@ -158,9 +163,15 @@ function generateFallbackReply(userMessage: string, faqs: BusinessFaq[], intent:
   };
 }
 
-function buildSystemPrompt(business: Business, faqs: BusinessFaq[]) {
+function buildSystemPrompt(
+  business: Business,
+  faqs: BusinessFaq[],
+  customer?: { customerName?: string; customerPhone?: string },
+) {
   return [
     `Eres el asistente comercial de ${business.name}.`,
+    customer?.customerName ? `Cliente: ${customer.customerName}` : "",
+    customer?.customerPhone ? `Telefono del cliente: ${customer.customerPhone}` : "",
     `Descripcion: ${business.description}`,
     `Servicios: ${business.services.join(", ")}`,
     `Horarios: ${business.hours}`,
@@ -170,6 +181,8 @@ function buildSystemPrompt(business: Business, faqs: BusinessFaq[]) {
     `FAQs: ${faqs.map((faq) => `P: ${faq.question} R: ${faq.answer}`).join(" | ")}`,
     "Responde breve y profesionalmente.",
     "Usa solamente la informacion anterior. Si falta informacion, di que debe confirmarse con el negocio.",
+    "No vuelvas a pedir nombre o telefono si ya aparecen como Cliente o Telefono del cliente.",
+    "Ten en cuenta el historial reciente antes de pedir datos faltantes.",
     "Si detectas intencion de agendar o cotizar, pide los datos faltantes.",
-  ].join("\n");
+  ].filter(Boolean).join("\n");
 }

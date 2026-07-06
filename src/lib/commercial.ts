@@ -25,6 +25,8 @@ const appointmentWords = [
   "jueves",
   "viernes",
   "sabado",
+  "agendame",
+  "agendarme",
   "sábado",
 ];
 
@@ -126,14 +128,21 @@ function detectCommercialIntent(normalized: string): Conversation["lastIntent"] 
 }
 
 function detectService(normalized: string, services: string[]) {
-  const directMatch = services.find((service) => {
-    const serviceWords = normalize(service)
-      .split(/\s+/)
-      .filter((word) => word.length > 3);
-    return serviceWords.some((word) => normalized.includes(word));
-  });
+  const exactMatch = services.find((service) => normalized.includes(normalize(service)));
+  if (exactMatch) return exactMatch;
 
-  if (directMatch) return directMatch;
+  const scoredMatch = services
+    .map((service) => {
+      const serviceWords = normalize(service)
+        .split(/\s+/)
+        .filter((word) => word.length > 3 && !["dental", "tecnica", "tecnico"].includes(word));
+      const score = serviceWords.filter((word) => normalized.includes(word)).length;
+      return { service, score };
+    })
+    .filter((item) => item.score > 0)
+    .sort((left, right) => right.score - left.score)[0];
+
+  if (scoredMatch) return scoredMatch.service;
 
   const synonymMap = [
     { match: ["reparar", "arreglar", "dano", "daño", "falla"], target: "reparacion" },
@@ -141,7 +150,7 @@ function detectService(normalized: string, services: string[]) {
     { match: ["instalar", "instalacion"], target: "instalacion" },
     { match: ["visita", "domicilio"], target: "visita" },
     { match: ["limpieza"], target: "limpieza" },
-    { match: ["blanqueamiento", "blanquear"], target: "blanqueamiento" },
+    { match: ["blanqueamiento", "blanquear", "blanqueamineto"], target: "blanqueamiento" },
     { match: ["ortodoncia", "brackets"], target: "ortodoncia" },
     { match: ["consulta", "valoracion", "valoracion"], target: "consulta" },
   ];
@@ -164,6 +173,13 @@ function detectDate(normalized: string) {
     return `${year}-${month}-${day}`;
   }
 
+  const textDateMatch = normalized.match(
+    /\b(\d{1,2})\s*(?:de)?\s*(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)\b/,
+  );
+  if (textDateMatch) {
+    return dateFromDayAndMonth(Number(textDateMatch[1]), textDateMatch[2]);
+  }
+
   if (normalized.includes("manana") || normalized.includes("mañana")) {
     return daysFromNow(1);
   }
@@ -180,7 +196,7 @@ function detectDate(normalized: string) {
 
 function detectTime(normalized: string) {
   const contextualMatch = normalized.match(
-    /\b(?:a las|a la|sobre las|hora|horario)\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm|a\.m\.|p\.m\.)?\b/,
+    /\b(?:a\s*las|alas|a la|sobre las|hora|horario)\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm|a\.m\.|p\.m\.)?\b/,
   );
   const explicitMatch = normalized.match(/\b(\d{1,2})(?::(\d{2}))\s*(am|pm|a\.m\.|p\.m\.)?\b/);
   const meridiemMatch = normalized.match(/\b(\d{1,2})\s*(am|pm|a\.m\.|p\.m\.)\b/);
@@ -223,6 +239,34 @@ function normalize(value: string) {
 function normalizeYear(value: string) {
   if (value.length === 2) return `20${value}`;
   return value;
+}
+
+function dateFromDayAndMonth(day: number, monthName: string) {
+  const months: Record<string, number> = {
+    enero: 1,
+    febrero: 2,
+    marzo: 3,
+    abril: 4,
+    mayo: 5,
+    junio: 6,
+    julio: 7,
+    agosto: 8,
+    septiembre: 9,
+    setiembre: 9,
+    octubre: 10,
+    noviembre: 11,
+    diciembre: 12,
+  };
+  const month = months[monthName];
+  if (!month || day < 1 || day > 31) return null;
+
+  const today = new Date();
+  let year = today.getFullYear();
+  const candidate = new Date(year, month - 1, day);
+  const todayStart = new Date(year, today.getMonth(), today.getDate());
+  if (candidate < todayStart) year += 1;
+
+  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
 
 function daysFromNow(days: number) {

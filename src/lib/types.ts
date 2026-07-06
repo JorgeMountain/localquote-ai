@@ -81,6 +81,7 @@ export type ChatRequest = {
   customerName: string;
   customerPhone: string;
   message: string;
+  history?: Pick<Message, "role" | "body">[];
   conversationId?: string;
   customerId?: string;
 };
