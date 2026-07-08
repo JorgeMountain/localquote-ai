@@ -1,6 +1,6 @@
 import OpenAI from "openai";
 import { analyzeCommercialRequest } from "./commercial";
-import type { Business, BusinessFaq, Conversation, Message } from "./types";
+import type { Business, BusinessFaq, BusinessLink, Conversation, Message } from "./types";
 
 type AiProvider = "deepseek" | "openai" | "none";
 
@@ -90,6 +90,7 @@ function relevantFaqReply(text: string, faqs: BusinessFaq[]) {
 export async function generateAssistantReply(input: {
   business: Business;
   faqs: BusinessFaq[];
+  links?: BusinessLink[];
   history: Message[];
   customerName?: string;
   customerPhone?: string;
@@ -107,7 +108,7 @@ export async function generateAssistantReply(input: {
         messages: [
           {
             role: "system",
-            content: buildSystemPrompt(input.business, input.faqs, {
+            content: buildSystemPrompt(input.business, input.faqs, input.links ?? [], {
               customerName: input.customerName,
               customerPhone: input.customerPhone,
             }),
@@ -131,13 +132,18 @@ export async function generateAssistantReply(input: {
     }
   }
 
-  return generateFallbackReply(input.userMessage, input.faqs, intent);
+  return generateFallbackReply(input.userMessage, input.faqs, input.links ?? [], intent);
 }
 
-function generateFallbackReply(userMessage: string, faqs: BusinessFaq[], intent: Conversation["lastIntent"]) {
+function generateFallbackReply(userMessage: string, faqs: BusinessFaq[], links: BusinessLink[], intent: Conversation["lastIntent"]) {
   const faq = relevantFaqReply(userMessage, faqs);
   if (faq) {
     return { intent, reply: `${faq.answer} Deseas que deje una solicitud para que el equipo te confirme?` };
+  }
+
+  const link = relevantLinkReply(userMessage, links);
+  if (link) {
+    return { intent, reply: `${link.label}: ${link.url}` };
   }
 
   if (intent === "appointment") {
@@ -166,6 +172,7 @@ function generateFallbackReply(userMessage: string, faqs: BusinessFaq[], intent:
 function buildSystemPrompt(
   business: Business,
   faqs: BusinessFaq[],
+  links: BusinessLink[],
   customer?: { customerName?: string; customerPhone?: string },
 ) {
   return [
@@ -179,10 +186,24 @@ function buildSystemPrompt(
     `Telefono: ${business.phone}`,
     `Reglas: ${business.rules.join(" | ")}`,
     `FAQs: ${faqs.map((faq) => `P: ${faq.question} R: ${faq.answer}`).join(" | ")}`,
+    `Enlaces aprobados: ${links.map((link) => `${link.label} (${link.purpose}): ${link.url}${link.notes ? ` - ${link.notes}` : ""}`).join(" | ")}`,
     "Responde breve y profesionalmente.",
     "Usa solamente la informacion anterior. Si falta informacion, di que debe confirmarse con el negocio.",
+    "Si el cliente pide un enlace, catalogo, pago, ubicacion, reserva o soporte, usa solo los enlaces aprobados.",
+    "No inventes enlaces.",
     "No vuelvas a pedir nombre o telefono si ya aparecen como Cliente o Telefono del cliente.",
     "Ten en cuenta el historial reciente antes de pedir datos faltantes.",
     "Si detectas intencion de agendar o cotizar, pide los datos faltantes.",
   ].filter(Boolean).join("\n");
+}
+
+function relevantLinkReply(text: string, links: BusinessLink[]) {
+  const normalized = text.toLowerCase();
+  return links.find((link) => {
+    const searchable = `${link.label} ${link.purpose} ${link.notes}`.toLowerCase();
+    return searchable
+      .split(/\W+/)
+      .filter((token) => token.length > 3)
+      .some((token) => normalized.includes(token));
+  });
 }

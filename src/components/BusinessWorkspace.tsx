@@ -22,28 +22,33 @@ import { useFormStatus } from "react-dom";
 import {
   createBusinessWithFeedback,
   createAvailabilitySlotWithFeedback,
+  createBusinessLinkWithFeedback,
   createFaqWithFeedback,
   deleteAvailabilitySlotWithFeedback,
   deleteBusinessWithFeedback,
+  deleteBusinessLinkWithFeedback,
   deleteFaqWithFeedback,
   saveBusinessHoursWithFeedback,
   updateBusinessWithFeedback,
+  updateBusinessLinkWithFeedback,
   updateFaqWithFeedback,
 } from "@/app/actions";
 import { ActionMessage } from "@/components/ActionForms";
-import type { AvailabilitySlot, Business, BusinessFaq, BusinessHour } from "@/lib/types";
+import type { AvailabilitySlot, Business, BusinessFaq, BusinessHour, BusinessLink } from "@/lib/types";
 
 export function BusinessWorkspace({
   businesses,
   faqs,
   businessHours,
   availabilitySlots,
+  businessLinks,
   whatsappBusinessSlug,
 }: {
   businesses: Business[];
   faqs: BusinessFaq[];
   businessHours: BusinessHour[];
   availabilitySlots: AvailabilitySlot[];
+  businessLinks: BusinessLink[];
   whatsappBusinessSlug: string;
 }) {
   const [selectedId, setSelectedId] = useState(businesses[0]?.id ?? "");
@@ -61,7 +66,11 @@ export function BusinessWorkspace({
     () => (selectedBusiness ? availabilitySlots.filter((slot) => slot.businessId === selectedBusiness.id) : []),
     [availabilitySlots, selectedBusiness],
   );
-  const completion = selectedBusiness ? getCompletion(selectedBusiness, businessFaqs.length, selectedBusinessHours.length) : [];
+  const selectedBusinessLinks = useMemo(
+    () => (selectedBusiness ? businessLinks.filter((link) => link.businessId === selectedBusiness.id) : []),
+    [businessLinks, selectedBusiness],
+  );
+  const completion = selectedBusiness ? getCompletion(selectedBusiness, businessFaqs.length) : [];
 
   return (
     <div className="grid gap-6">
@@ -166,10 +175,21 @@ export function BusinessWorkspace({
 
                 <section className="rounded-xl border border-black/10 bg-white p-5 shadow-sm">
                   <FormHeader
+                    icon={Link2}
+                    eyebrow="Opcional"
+                    title="Enlaces y redirecciones"
+                    description="Agrega links aprobados para catalogos, pagos, reservas, ubicacion o soporte. El bot solo debe enviar enlaces que esten aqui."
+                  />
+
+                  <BusinessLinksEditor businessId={selectedBusiness.id} links={selectedBusinessLinks} />
+                </section>
+
+                <section className="rounded-xl border border-black/10 bg-white p-5 shadow-sm">
+                  <FormHeader
                     icon={Clock3}
-                    eyebrow="Paso 2"
-                    title="Agenda y disponibilidad"
-                    description="Define horarios laborales y excepciones. El bot valida contra esto antes de registrar citas."
+                    eyebrow="Opcional"
+                    title="Agenda y disponibilidad avanzada"
+                    description="Usa esto solo si el negocio trabaja con horarios definidos. Si no lo configuras, el bot deja las citas como solicitudes pendientes."
                   />
                   <ScheduleEditor
                     business={selectedBusiness}
@@ -181,7 +201,7 @@ export function BusinessWorkspace({
                 <section className="rounded-xl border border-black/10 bg-white p-5 shadow-sm">
                   <FormHeader
                     icon={HelpCircle}
-                    eyebrow="Paso 3"
+                    eyebrow="Paso 2"
                     title="Preguntas frecuentes"
                     description="Agrega respuestas aprobadas. El bot las usa como fuente principal antes de improvisar."
                   />
@@ -203,7 +223,7 @@ export function BusinessWorkspace({
                 <section className="rounded-xl border border-black/10 bg-[#111111] p-5 text-white shadow-sm">
                   <FormHeader
                     icon={Sparkles}
-                    eyebrow="Paso 4"
+                    eyebrow="Paso 3"
                     title="Prueba el asistente"
                     description="Cuando termines la configuracion, prueba la pagina publica o escribe al WhatsApp conectado."
                     dark
@@ -248,9 +268,9 @@ function SetupIntro({ hasBusinesses }: { hasBusinesses: boolean }) {
         </div>
         <div className="grid content-center gap-3 rounded-xl border border-white/10 bg-white/5 p-5">
           <StepPill number="1" label="Datos del negocio" done={hasBusinesses} />
-          <StepPill number="2" label="Servicios, precios y horarios" done={false} />
-          <StepPill number="3" label="Reglas del bot y FAQs" done={false} />
-          <StepPill number="4" label="Prueba en chat o WhatsApp" done={false} />
+          <StepPill number="2" label="Servicios, precios y reglas" done={false} />
+          <StepPill number="3" label="FAQs y prueba del bot" done={false} />
+          <StepPill number="+" label="Agenda opcional si aplica" done={false} />
         </div>
       </div>
     </section>
@@ -353,8 +373,10 @@ function ScheduleEditor({
         <input type="hidden" name="business_id" value={business.id} />
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h3 className="font-semibold">Horario semanal</h3>
-            <p className="mt-1 text-sm text-[#706d62]">Marca los dias abiertos y guarda rangos de atencion.</p>
+            <h3 className="font-semibold">Horario semanal opcional</h3>
+            <p className="mt-1 text-sm text-[#706d62]">
+              Si lo dejas vacio, el bot no bloquea horarios: solo registra solicitudes pendientes para revision.
+            </p>
           </div>
           <SubmitButton icon={Save} label="Guardar horario" />
         </div>
@@ -393,7 +415,7 @@ function ScheduleEditor({
         <div>
           <h3 className="font-semibold">Excepciones por fecha</h3>
           <p className="mt-1 text-sm text-[#706d62]">
-            Usa esto para abrir un cupo especial, bloquear una hora o marcar una hora como ocupada.
+            Usa esto solo para negocios que manejan agenda: abre cupos especiales, bloquea horas o marca horas ocupadas.
           </p>
         </div>
         <div className="mt-4 grid gap-3 md:grid-cols-2">
@@ -421,7 +443,7 @@ function ScheduleEditor({
           ))}
           {availabilitySlots.length === 0 && (
             <p className="rounded-lg border border-dashed border-black/15 bg-[#f8f6f1] p-4 text-sm text-[#706d62]">
-              No hay excepciones. El bot usara solo el horario semanal y las citas existentes.
+              No hay excepciones. Si tampoco hay horario semanal, el bot registrara citas como pendientes sin validar cupos.
             </p>
           )}
         </div>
@@ -706,6 +728,92 @@ function FaqEditor({ faq }: { faq: BusinessFaq }) {
   );
 }
 
+function BusinessLinksEditor({ businessId, links }: { businessId: string; links: BusinessLink[] }) {
+  const [state, formAction] = useActionState(createBusinessLinkWithFeedback, null);
+
+  return (
+    <div className="mt-5 grid gap-4">
+      <form action={formAction} className="grid gap-3 rounded-lg border border-black/10 bg-[#f8f6f1] p-4 md:grid-cols-2">
+        <input type="hidden" name="business_id" value={businessId} />
+        <input className={inputClass()} name="label" placeholder="Nombre del enlace. Ej: Catalogo" required />
+        <input className={inputClass()} name="url" placeholder="https://..." required />
+        <select className={inputClass()} name="purpose" defaultValue="general" aria-label="Uso del enlace">
+          <option value="general">General</option>
+          <option value="booking">Reserva / agenda externa</option>
+          <option value="payment">Pago</option>
+          <option value="catalog">Catalogo</option>
+          <option value="location">Ubicacion</option>
+          <option value="support">Soporte</option>
+        </select>
+        <label className="flex h-11 items-center gap-2 rounded-lg border border-black/15 bg-[#f8f6f1] px-3 text-sm">
+          <input type="checkbox" name="is_active" defaultChecked />
+          Activo para el bot
+        </label>
+        <textarea
+          className={textareaClass("md:col-span-2")}
+          name="notes"
+          placeholder="Cuando debe enviarlo. Ej: Si piden pagar anticipo, enviar este link."
+        />
+        <div className="flex flex-wrap items-center gap-3 md:col-span-2">
+          <SubmitButton icon={Plus} label="Agregar enlace" />
+          <ActionMessage state={state} />
+        </div>
+      </form>
+
+      <div className="grid gap-3">
+        {links.map((link) => (
+          <BusinessLinkEditor key={link.id} link={link} />
+        ))}
+        {links.length === 0 && (
+          <p className="rounded-lg border border-dashed border-black/15 bg-[#f8f6f1] p-4 text-sm text-[#706d62]">
+            No hay enlaces. Si el cliente pide un link, el bot respondera que debe confirmarlo con el negocio.
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function BusinessLinkEditor({ link }: { link: BusinessLink }) {
+  const [updateState, updateAction] = useActionState(updateBusinessLinkWithFeedback, null);
+  const [deleteState, deleteAction] = useActionState(deleteBusinessLinkWithFeedback, null);
+
+  return (
+    <article className="rounded-lg border border-black/10 bg-[#f8f6f1] p-4">
+      <form action={updateAction} className="grid gap-3 md:grid-cols-2">
+        <input type="hidden" name="id" value={link.id} />
+        <input className={inputClass("white", "font-semibold")} name="label" defaultValue={link.label} />
+        <input className={inputClass("white")} name="url" defaultValue={link.url} />
+        <select className={inputClass("white")} name="purpose" defaultValue={link.purpose} aria-label="Uso del enlace">
+          <option value="general">General</option>
+          <option value="booking">Reserva / agenda externa</option>
+          <option value="payment">Pago</option>
+          <option value="catalog">Catalogo</option>
+          <option value="location">Ubicacion</option>
+          <option value="support">Soporte</option>
+        </select>
+        <label className="flex h-11 items-center gap-2 rounded-lg border border-black/15 bg-white px-3 text-sm">
+          <input type="checkbox" name="is_active" defaultChecked={link.isActive} />
+          Activo para el bot
+        </label>
+        <textarea className={textareaClass("bg-white md:col-span-2")} name="notes" defaultValue={link.notes} />
+        <div className="flex flex-wrap items-center gap-2 md:col-span-2">
+          <SubmitButton icon={Save} label="Guardar enlace" small />
+          <ActionMessage state={updateState} compact />
+        </div>
+      </form>
+      <form action={deleteAction} className="mt-2 flex flex-wrap items-center gap-2">
+        <input type="hidden" name="id" value={link.id} />
+        <button className="inline-flex h-9 items-center gap-2 rounded-lg border border-black/15 bg-white px-3 text-sm font-semibold">
+          <Trash2 size={15} />
+          Eliminar
+        </button>
+        <ActionMessage state={deleteState} compact />
+      </form>
+    </article>
+  );
+}
+
 function FormHeader({
   icon: Icon,
   eyebrow,
@@ -829,12 +937,11 @@ const weekDays = [
   { value: 6, label: "Sabado" },
 ];
 
-function getCompletion(business: Business, faqCount: number, businessHourCount: number) {
+function getCompletion(business: Business, faqCount: number) {
   return [
     { label: "Nombre y contacto", done: Boolean(business.name && business.phone) },
     { label: "Descripcion del negocio", done: business.description.trim().length > 20 },
     { label: "Servicios y precios", done: business.services.length > 0 },
-    { label: "Agenda estructurada", done: businessHourCount > 0 },
     { label: "Reglas del bot", done: business.rules.length > 0 },
     { label: "FAQs cargadas", done: faqCount > 0 },
   ];

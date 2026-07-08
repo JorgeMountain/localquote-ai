@@ -4,7 +4,14 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { businesses, faqs } from "@/lib/seed";
 import { createClient } from "@/lib/supabase/server";
-import type { AppointmentStatus, AvailabilityStatus, BusinessType, LeadStatus, QuoteStatus } from "@/lib/types";
+import type {
+  AppointmentStatus,
+  AvailabilityStatus,
+  BusinessLinkPurpose,
+  BusinessType,
+  LeadStatus,
+  QuoteStatus,
+} from "@/lib/types";
 
 export type ActionState = {
   status: "success" | "error";
@@ -306,6 +313,79 @@ async function deleteFaqCore(formData: FormData) {
   if (!user) redirect("/login");
 
   const { error } = await supabase.from("business_faqs").delete().eq("id", String(formData.get("id") ?? ""));
+
+  if (error) throw error;
+  revalidatePath("/businesses");
+}
+
+export async function createBusinessLinkWithFeedback(_state: ActionState, formData: FormData): Promise<ActionState> {
+  return withFeedback(() => createBusinessLinkCore(formData), "Enlace creado.");
+}
+
+async function createBusinessLinkCore(formData: FormData) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) redirect("/login");
+
+  const businessId = String(formData.get("business_id") ?? "");
+  await assertBusinessOwner(supabase, businessId, user.id);
+
+  const { error } = await supabase.from("business_links").insert({
+    business_id: businessId,
+    label: String(formData.get("label") ?? "").trim(),
+    url: normalizeHttpUrl(String(formData.get("url") ?? "")),
+    purpose: parseBusinessLinkPurpose(String(formData.get("purpose") ?? "")),
+    notes: String(formData.get("notes") ?? "").trim(),
+    is_active: formData.get("is_active") !== "off",
+  });
+
+  if (error) throw error;
+  revalidatePath("/businesses");
+}
+
+export async function updateBusinessLinkWithFeedback(_state: ActionState, formData: FormData): Promise<ActionState> {
+  return withFeedback(() => updateBusinessLinkCore(formData), "Enlace actualizado.");
+}
+
+async function updateBusinessLinkCore(formData: FormData) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) redirect("/login");
+
+  const { error } = await supabase
+    .from("business_links")
+    .update({
+      label: String(formData.get("label") ?? "").trim(),
+      url: normalizeHttpUrl(String(formData.get("url") ?? "")),
+      purpose: parseBusinessLinkPurpose(String(formData.get("purpose") ?? "")),
+      notes: String(formData.get("notes") ?? "").trim(),
+      is_active: formData.get("is_active") === "on",
+    })
+    .eq("id", String(formData.get("id") ?? ""));
+
+  if (error) throw error;
+  revalidatePath("/businesses");
+}
+
+export async function deleteBusinessLinkWithFeedback(_state: ActionState, formData: FormData): Promise<ActionState> {
+  return withFeedback(() => deleteBusinessLinkCore(formData), "Enlace eliminado.");
+}
+
+async function deleteBusinessLinkCore(formData: FormData) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) redirect("/login");
+
+  const { error } = await supabase.from("business_links").delete().eq("id", String(formData.get("id") ?? ""));
 
   if (error) throw error;
   revalidatePath("/businesses");
@@ -674,6 +754,13 @@ function parseAvailabilityStatus(value: string): AvailabilityStatus {
   return "available";
 }
 
+function parseBusinessLinkPurpose(value: string): BusinessLinkPurpose {
+  if (["booking", "payment", "catalog", "location", "support"].includes(value)) {
+    return value as BusinessLinkPurpose;
+  }
+  return "general";
+}
+
 function parseLeadStatus(value: string): LeadStatus {
   if (value === "qualified" || value === "appointment" || value === "quoted") return value;
   return "new";
@@ -681,4 +768,32 @@ function parseLeadStatus(value: string): LeadStatus {
 
 function isValidTime(value: string) {
   return /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
+}
+
+function normalizeHttpUrl(value: string) {
+  const trimmed = value.trim();
+  try {
+    const url = new URL(trimmed);
+    if (url.protocol !== "http:" && url.protocol !== "https:") {
+      throw new Error("El enlace debe empezar por http:// o https://.");
+    }
+    return url.toString();
+  } catch {
+    throw new Error("Ingresa un enlace valido que empiece por http:// o https://.");
+  }
+}
+
+async function assertBusinessOwner(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  businessId: string,
+  userId: string,
+) {
+  const { data, error } = await supabase
+    .from("businesses")
+    .select("id")
+    .eq("id", businessId)
+    .eq("owner_id", userId)
+    .single();
+
+  if (error || !data) throw error ?? new Error("Negocio no encontrado.");
 }

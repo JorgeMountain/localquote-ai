@@ -8,6 +8,8 @@ export type QuoteStatus = "draft" | "sent" | "accepted" | "rejected";
 
 export type AvailabilityStatus = "available" | "blocked" | "booked";
 
+export type BusinessLinkPurpose = "general" | "booking" | "payment" | "catalog" | "location" | "support";
+
 export type Business = {
   id: string;
   ownerId: string;
@@ -28,6 +30,16 @@ export type BusinessFaq = {
   question: string;
   answer: string;
   category?: string;
+};
+
+export type BusinessLink = {
+  id: string;
+  businessId: string;
+  label: string;
+  url: string;
+  purpose: BusinessLinkPurpose;
+  notes: string;
+  isActive: boolean;
 };
 
 export type Customer = {

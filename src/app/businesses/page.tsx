@@ -25,6 +25,7 @@ export default async function BusinessesPage() {
           faqs={data.faqs}
           businessHours={data.businessHours}
           availabilitySlots={data.availabilitySlots}
+          businessLinks={data.businessLinks}
           whatsappBusinessSlug={process.env.WHATSAPP_DEFAULT_BUSINESS_SLUG ?? ""}
         />
       </div>

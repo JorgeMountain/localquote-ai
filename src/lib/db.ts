@@ -5,6 +5,7 @@ import type {
   Business,
   BusinessFaq,
   BusinessHour,
+  BusinessLink,
   Conversation,
   Customer,
   Message,
@@ -81,6 +82,16 @@ type QuoteRow = {
   status: Quote["status"];
 };
 
+type BusinessLinkRow = {
+  id: string;
+  business_id: string;
+  label: string;
+  url: string;
+  purpose: BusinessLink["purpose"];
+  notes: string;
+  is_active: boolean;
+};
+
 type ScheduleAppointmentRow = {
   business_id: string;
   preferred_date: string;
@@ -116,6 +127,7 @@ export type DashboardData = {
   quotes: Quote[];
   businessHours: BusinessHour[];
   availabilitySlots: AvailabilitySlot[];
+  businessLinks: BusinessLink[];
 };
 
 export async function getDashboardData(supabase: SupabaseClient, ownerId: string): Promise<DashboardData> {
@@ -141,6 +153,7 @@ export async function getDashboardData(supabase: SupabaseClient, ownerId: string
       quotes: [],
       businessHours: [],
       availabilitySlots: [],
+      businessLinks: [],
     };
   }
 
@@ -152,6 +165,7 @@ export async function getDashboardData(supabase: SupabaseClient, ownerId: string
     quotesResult,
     businessHoursResult,
     availabilitySlotsResult,
+    businessLinksResult,
   ] =
     await Promise.all([
       supabase.from("business_faqs").select("*").in("business_id", businessIds),
@@ -170,6 +184,7 @@ export async function getDashboardData(supabase: SupabaseClient, ownerId: string
         .in("business_id", businessIds)
         .order("date")
         .order("start_time"),
+      supabase.from("business_links").select("*").in("business_id", businessIds).order("created_at"),
     ]);
 
   for (const result of [
@@ -180,6 +195,7 @@ export async function getDashboardData(supabase: SupabaseClient, ownerId: string
     quotesResult,
     businessHoursResult,
     availabilitySlotsResult,
+    businessLinksResult,
   ]) {
     if (result.error) throw result.error;
   }
@@ -202,6 +218,7 @@ export async function getDashboardData(supabase: SupabaseClient, ownerId: string
     quotes: ((quotesResult.data ?? []) as QuoteRow[]).map(mapQuote),
     businessHours: ((businessHoursResult.data ?? []) as BusinessHourRow[]).map(mapBusinessHour),
     availabilitySlots: ((availabilitySlotsResult.data ?? []) as AvailabilitySlotRow[]).map(mapAvailabilitySlot),
+    businessLinks: ((businessLinksResult.data ?? []) as BusinessLinkRow[]).map(mapBusinessLink),
   };
 }
 
@@ -224,6 +241,17 @@ export async function getPublicFaqs(supabase: SupabaseClient, businessId: string
 
   if (error) throw error;
   return ((data ?? []) as FaqRow[]).map(mapFaq);
+}
+
+export async function getPublicLinks(supabase: SupabaseClient, businessId: string) {
+  const { data, error } = await supabase
+    .from("business_links")
+    .select("id, business_id, label, url, purpose, notes, is_active")
+    .eq("business_id", businessId)
+    .eq("is_active", true);
+
+  if (error) throw error;
+  return ((data ?? []) as BusinessLinkRow[]).map(mapBusinessLink);
 }
 
 export async function getPublicSchedule(supabase: SupabaseClient, businessId: string) {
@@ -329,6 +357,18 @@ function mapQuote(row: QuoteRow): Quote {
     maxPrice: row.max_price,
     notes: row.notes,
     status: row.status,
+  };
+}
+
+function mapBusinessLink(row: BusinessLinkRow): BusinessLink {
+  return {
+    id: row.id,
+    businessId: row.business_id,
+    label: row.label,
+    url: row.url,
+    purpose: row.purpose,
+    notes: row.notes,
+    isActive: row.is_active,
   };
 }
 

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { generateAssistantReply } from "@/lib/ai";
 import { analyzeCommercialRequest, buildCommercialReply } from "@/lib/commercial";
-import { getPublicBusiness, getPublicFaqs, getPublicSchedule } from "@/lib/db";
+import { getPublicBusiness, getPublicFaqs, getPublicLinks, getPublicSchedule } from "@/lib/db";
 import { WebChatProvider } from "@/lib/messaging";
 import { notifyBusinessOwner } from "@/lib/owner-notifications";
 import { buildAvailabilityReply, validateAppointmentAvailability } from "@/lib/schedule";
@@ -27,8 +27,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Business not found" }, { status: 404 });
   }
 
-  const [businessFaqs, schedule] = await Promise.all([
+  const [businessFaqs, businessLinks, schedule] = await Promise.all([
     getPublicFaqs(supabase, business.id),
+    getPublicLinks(supabase, business.id),
     getPublicSchedule(supabase, business.id),
   ]);
   const customerId = input.customerId ?? crypto.randomUUID();
@@ -85,6 +86,7 @@ export async function POST(request: Request) {
   const ai = await generateAssistantReply({
     business,
     faqs: businessFaqs,
+    links: businessLinks,
     history,
     customerName: input.customerName,
     customerPhone: input.customerPhone,
