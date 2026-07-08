@@ -58,7 +58,10 @@ export default async function AppointmentsPage({ searchParams }: AppointmentsPag
                   const business = data.businesses.find((item) => item.id === appointment.businessId);
                   return (
                     <tr key={appointment.id} className="align-top">
-                      <td className="py-4 font-medium">{customer?.name}</td>
+                      <td className="py-4 font-medium">
+                        {customer?.name}
+                        <span className="block text-[#706d62]">{customer?.phone}</span>
+                      </td>
                       <td>{business?.name}</td>
                       <td>{appointment.service}</td>
                       <td>

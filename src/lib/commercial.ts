@@ -216,6 +216,8 @@ function detectTime(normalized: string) {
 
 function estimatePriceRange(business: Business, service?: string): [number, number] {
   const normalizedService = normalize(service ?? "");
+  const explicitRange = extractPriceRange(service ?? "");
+  if (explicitRange) return explicitRange;
 
   if (business.type === "dentist") {
     if (normalizedService.includes("limpieza")) return [120000, 180000];
@@ -227,6 +229,18 @@ function estimatePriceRange(business: Business, service?: string): [number, numb
   if (normalizedService.includes("visita") || normalizedService.includes("diagnostico")) return [80000, 140000];
   if (normalizedService.includes("instalacion")) return [120000, 320000];
   return [80000, 220000];
+}
+
+function extractPriceRange(value: string): [number, number] | null {
+  const prices = value
+    .match(/\$?\s*\d[\d.,]*/g)
+    ?.map((price) => Number(price.replace(/[^\d]/g, "")))
+    .filter((price) => Number.isFinite(price) && price > 0)
+    .slice(0, 2);
+
+  if (!prices || prices.length === 0) return null;
+  if (prices.length === 1) return [prices[0], prices[0]];
+  return [Math.min(prices[0], prices[1]), Math.max(prices[0], prices[1])];
 }
 
 function normalize(value: string) {

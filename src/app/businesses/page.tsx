@@ -17,10 +17,14 @@ export default async function BusinessesPage() {
 
   return (
     <AppShell>
-      <Header title="Negocios y FAQs" subtitle="Configura la informacion que limita y guia las respuestas de IA." />
+      <Header title="Configurar bot" subtitle="Crea negocios reales y define que debe saber, decir y evitar el asistente." />
       {data.businesses.length === 0 && <OnboardingPanel userEmail={user.email} />}
       <div className="mt-6">
-        <BusinessWorkspace businesses={data.businesses} faqs={data.faqs} />
+        <BusinessWorkspace
+          businesses={data.businesses}
+          faqs={data.faqs}
+          whatsappBusinessSlug={process.env.WHATSAPP_DEFAULT_BUSINESS_SLUG ?? ""}
+        />
       </div>
     </AppShell>
   );

@@ -152,7 +152,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
                         <p className="mt-1 text-sm text-white/65">{business.description}</p>
                       </div>
                       <span className="rounded-sm bg-[#e2f26b] px-2 py-1 text-xs font-semibold text-black">
-                        {business.type === "dentist" ? "Odonto" : "Tecnico"}
+                        {business.type === "dentist" ? "Salud" : "General"}
                       </span>
                     </div>
                     <Link

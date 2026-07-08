@@ -2,7 +2,9 @@ import { NextResponse } from "next/server";
 import { generateAssistantReply } from "@/lib/ai";
 import { analyzeCommercialRequest, buildCommercialReply } from "@/lib/commercial";
 import { getPublicBusiness, getPublicFaqs } from "@/lib/db";
+import { notifyBusinessOwner } from "@/lib/owner-notifications";
 import { createAnonRouteClient } from "@/lib/supabase/route";
+import { sendWhatsAppText } from "@/lib/whatsapp";
 import type { Message } from "@/lib/types";
 
 type WhatsAppTextMessage = {
@@ -60,7 +62,7 @@ export async function POST(request: Request) {
   const text = message.text?.body?.trim();
 
   if (!text || message.type !== "text") {
-    await sendWhatsAppMessage(message.from, "Por ahora solo puedo responder mensajes de texto.");
+    await sendWhatsAppText(message.from, "Por ahora solo puedo responder mensajes de texto.");
     return NextResponse.json({ ok: true });
   }
 
@@ -68,7 +70,7 @@ export async function POST(request: Request) {
   const business = await getPublicBusiness(supabase, process.env.WHATSAPP_DEFAULT_BUSINESS_SLUG ?? "sonrisa-clara");
 
   if (!business) {
-    await sendWhatsAppMessage(message.from, "No pude encontrar el negocio configurado para este WhatsApp.");
+    await sendWhatsAppText(message.from, "No pude encontrar el negocio configurado para este WhatsApp.");
     return NextResponse.json({ ok: false, error: "Business not found" }, { status: 500 });
   }
 
@@ -155,36 +157,72 @@ export async function POST(request: Request) {
   if (messagesError) throw messagesError;
 
   if (analysis.quoteDraft && !hasExistingQuote) {
-    const { error } = await supabase.from("quotes").insert({
+    const quote = {
       id: crypto.randomUUID(),
-      business_id: business.id,
-      customer_id: customerId,
+      businessId: business.id,
+      customerId,
       service: analysis.quoteDraft.service,
       description: analysis.quoteDraft.description,
-      min_price: analysis.quoteDraft.minPrice,
-      max_price: analysis.quoteDraft.maxPrice,
+      minPrice: analysis.quoteDraft.minPrice,
+      maxPrice: analysis.quoteDraft.maxPrice,
       notes: analysis.quoteDraft.notes,
-      status: "draft",
+      status: "draft" as const,
+    };
+    const { error } = await supabase.from("quotes").insert({
+      id: quote.id,
+      business_id: quote.businessId,
+      customer_id: quote.customerId,
+      service: quote.service,
+      description: quote.description,
+      min_price: quote.minPrice,
+      max_price: quote.maxPrice,
+      notes: quote.notes,
+      status: quote.status,
     });
 
     if (error) throw error;
+
+    await notifyBusinessOwner({
+      type: "quote",
+      business,
+      customerName,
+      customerPhone: contact.wa_id || message.from,
+      quote,
+    });
   }
 
   if (analysis.appointmentDraft && !hasExistingAppointment) {
-    const { error } = await supabase.from("appointment_requests").insert({
+    const appointment = {
       id: crypto.randomUUID(),
-      business_id: business.id,
-      customer_id: customerId,
+      businessId: business.id,
+      customerId,
       service: analysis.appointmentDraft.service,
-      preferred_date: analysis.appointmentDraft.preferredDate,
-      preferred_time: analysis.appointmentDraft.preferredTime,
-      status: "pending",
+      preferredDate: analysis.appointmentDraft.preferredDate,
+      preferredTime: analysis.appointmentDraft.preferredTime,
+      status: "pending" as const,
+    };
+    const { error } = await supabase.from("appointment_requests").insert({
+      id: appointment.id,
+      business_id: appointment.businessId,
+      customer_id: appointment.customerId,
+      service: appointment.service,
+      preferred_date: appointment.preferredDate,
+      preferred_time: appointment.preferredTime,
+      status: appointment.status,
     });
 
     if (error) throw error;
+
+    await notifyBusinessOwner({
+      type: "appointment",
+      business,
+      customerName,
+      customerPhone: contact.wa_id || message.from,
+      appointment,
+    });
   }
 
-  await sendWhatsAppMessage(message.from, reply);
+  await sendWhatsAppText(message.from, reply);
   const fullHistory: Pick<Message, "role" | "body">[] = [
     ...(session?.history ?? []),
     { role: "customer", body: text },
@@ -210,37 +248,6 @@ function getIncomingMessage(payload: WhatsAppWebhookPayload) {
   }
 
   return null;
-}
-
-async function sendWhatsAppMessage(to: string, body: string) {
-  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
-  const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
-
-  if (!phoneNumberId || !accessToken) {
-    throw new Error("Missing WHATSAPP_PHONE_NUMBER_ID or WHATSAPP_ACCESS_TOKEN.");
-  }
-
-  const response = await fetch(`https://graph.facebook.com/v25.0/${phoneNumberId}/messages`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      messaging_product: "whatsapp",
-      to,
-      type: "text",
-      text: {
-        preview_url: false,
-        body: body.slice(0, 3900),
-      },
-    }),
-  });
-
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`WhatsApp send failed: ${error}`);
-  }
 }
 
 function hasRelevantFaq(message: string, faqs: Awaited<ReturnType<typeof getPublicFaqs>>) {

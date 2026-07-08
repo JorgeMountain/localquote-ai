@@ -11,7 +11,7 @@ import {
 
 const navItems = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/businesses", label: "Negocios y FAQs", icon: BriefcaseBusiness },
+  { href: "/businesses", label: "Configurar bot", icon: BriefcaseBusiness },
   { href: "/conversations", label: "Conversaciones", icon: Inbox },
   { href: "/appointments", label: "Citas", icon: CalendarClock },
   { href: "/quotes", label: "Cotizaciones", icon: FileText },
@@ -49,16 +49,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <div className="absolute bottom-6 left-5 right-5 rounded-md border border-black/10 bg-white p-4">
           <div className="flex items-center gap-2 text-sm font-semibold">
             <MessageCircle size={16} />
-            Demo publico
+            Flujo recomendado
           </div>
-          <div className="mt-3 grid gap-2 text-sm">
-            <Link className="underline-offset-4 hover:underline" href="/b/sonrisa-clara">
-              /b/sonrisa-clara
-            </Link>
-            <Link className="underline-offset-4 hover:underline" href="/b/fixpro-tecnicos">
-              /b/fixpro-tecnicos
-            </Link>
-          </div>
+          <p className="mt-3 text-sm leading-6 text-[#6f6b61]">
+            Configura negocio, precios, horarios, reglas y FAQs antes de probar WhatsApp.
+          </p>
         </div>
       </aside>
 

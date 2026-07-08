@@ -133,6 +133,10 @@ export async function updateBusinessWithFeedback(_state: ActionState, formData: 
   return withFeedback(() => updateBusinessCore(formData), "Negocio actualizado.");
 }
 
+export async function deleteBusinessWithFeedback(_state: ActionState, formData: FormData): Promise<ActionState> {
+  return withFeedback(() => deleteBusinessCore(formData), "Negocio eliminado.");
+}
+
 async function updateBusinessCore(formData: FormData) {
   const supabase = await createClient();
   const {
@@ -162,6 +166,32 @@ async function updateBusinessCore(formData: FormData) {
   if (error) throw error;
   revalidatePath("/");
   revalidatePath("/businesses");
+}
+
+async function deleteBusinessCore(formData: FormData) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) redirect("/login");
+
+  const id = String(formData.get("id") ?? "");
+  const name = String(formData.get("name") ?? "");
+  const confirmation = String(formData.get("confirmation") ?? "").trim();
+
+  if (!id || confirmation !== name) {
+    throw new Error("Para eliminar, escribe exactamente el nombre del negocio.");
+  }
+
+  const { error } = await supabase.from("businesses").delete().eq("id", id).eq("owner_id", user.id);
+
+  if (error) throw error;
+  revalidatePath("/");
+  revalidatePath("/businesses");
+  revalidatePath("/conversations");
+  revalidatePath("/appointments");
+  revalidatePath("/quotes");
 }
 
 export async function createBusiness(formData: FormData) {

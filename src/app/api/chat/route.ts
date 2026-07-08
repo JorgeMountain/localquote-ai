@@ -3,6 +3,7 @@ import { generateAssistantReply } from "@/lib/ai";
 import { analyzeCommercialRequest, buildCommercialReply } from "@/lib/commercial";
 import { getPublicBusiness, getPublicFaqs } from "@/lib/db";
 import { WebChatProvider } from "@/lib/messaging";
+import { notifyBusinessOwner } from "@/lib/owner-notifications";
 import { createAnonRouteClient } from "@/lib/supabase/route";
 import type { ChatRequest } from "@/lib/types";
 
@@ -63,6 +64,7 @@ export async function POST(request: Request) {
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
+
   }
 
   const ai = await generateAssistantReply({
@@ -93,6 +95,7 @@ export async function POST(request: Request) {
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
+
   }
 
   const { error: messagesError } = await supabase.from("messages").insert([
@@ -141,6 +144,14 @@ export async function POST(request: Request) {
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
+
+    await notifyBusinessOwner({
+      type: "quote",
+      business,
+      customerName: input.customerName,
+      customerPhone: input.customerPhone,
+      quote,
+    });
   }
 
   const appointment =
@@ -168,6 +179,14 @@ export async function POST(request: Request) {
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
+
+    await notifyBusinessOwner({
+      type: "appointment",
+      business,
+      customerName: input.customerName,
+      customerPhone: input.customerPhone,
+      appointment,
+    });
   }
 
   const response = await provider.send({
