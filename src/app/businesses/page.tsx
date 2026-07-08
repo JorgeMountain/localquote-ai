@@ -23,6 +23,8 @@ export default async function BusinessesPage() {
         <BusinessWorkspace
           businesses={data.businesses}
           faqs={data.faqs}
+          businessHours={data.businessHours}
+          availabilitySlots={data.availabilitySlots}
           whatsappBusinessSlug={process.env.WHATSAPP_DEFAULT_BUSINESS_SLUG ?? ""}
         />
       </div>

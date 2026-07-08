@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { businesses, faqs } from "@/lib/seed";
 import { createClient } from "@/lib/supabase/server";
-import type { AppointmentStatus, BusinessType, LeadStatus, QuoteStatus } from "@/lib/types";
+import type { AppointmentStatus, AvailabilityStatus, BusinessType, LeadStatus, QuoteStatus } from "@/lib/types";
 
 export type ActionState = {
   status: "success" | "error";
@@ -311,6 +311,133 @@ async function deleteFaqCore(formData: FormData) {
   revalidatePath("/businesses");
 }
 
+export async function saveBusinessHoursWithFeedback(_state: ActionState, formData: FormData): Promise<ActionState> {
+  return withFeedback(() => saveBusinessHoursCore(formData), "Horario semanal guardado.");
+}
+
+async function saveBusinessHoursCore(formData: FormData) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) redirect("/login");
+
+  const businessId = String(formData.get("business_id") ?? "");
+  const { data: business, error: businessError } = await supabase
+    .from("businesses")
+    .select("id")
+    .eq("id", businessId)
+    .eq("owner_id", user.id)
+    .single();
+
+  if (businessError || !business) throw businessError ?? new Error("Negocio no encontrado.");
+
+  const hours: { business_id: string; day_of_week: number; opens_at: string; closes_at: string }[] = [];
+
+  for (let day = 0; day < 7; day += 1) {
+    const enabled = formData.get(`day_${day}_enabled`) === "on";
+    const opensAt = String(formData.get(`day_${day}_opens`) ?? "");
+    const closesAt = String(formData.get(`day_${day}_closes`) ?? "");
+
+    if (!enabled) continue;
+    if (!isValidTime(opensAt) || !isValidTime(closesAt) || opensAt >= closesAt) {
+      throw new Error("Revisa los horarios: cada dia activo necesita apertura menor que cierre.");
+    }
+
+    hours.push({
+      business_id: businessId,
+      day_of_week: day,
+      opens_at: opensAt,
+      closes_at: closesAt,
+    });
+  }
+
+  const { error: deleteError } = await supabase.from("business_hours").delete().eq("business_id", businessId);
+  if (deleteError) throw deleteError;
+
+  if (hours.length > 0) {
+    const { error: insertError } = await supabase.from("business_hours").insert(hours);
+    if (insertError) throw insertError;
+  }
+
+  revalidatePath("/businesses");
+}
+
+export async function createAvailabilitySlotWithFeedback(
+  _state: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  return withFeedback(() => createAvailabilitySlotCore(formData), "Disponibilidad guardada.");
+}
+
+async function createAvailabilitySlotCore(formData: FormData) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) redirect("/login");
+
+  const businessId = String(formData.get("business_id") ?? "");
+  const date = String(formData.get("date") ?? "");
+  const startTime = String(formData.get("start_time") ?? "");
+  const endTime = String(formData.get("end_time") ?? "");
+  const status = parseAvailabilityStatus(String(formData.get("status") ?? ""));
+
+  if (!date || !isValidTime(startTime) || !isValidTime(endTime) || startTime >= endTime) {
+    throw new Error("Completa fecha, hora inicio y hora fin validas.");
+  }
+
+  const { data: business, error: businessError } = await supabase
+    .from("businesses")
+    .select("id")
+    .eq("id", businessId)
+    .eq("owner_id", user.id)
+    .single();
+
+  if (businessError || !business) throw businessError ?? new Error("Negocio no encontrado.");
+
+  const { error } = await supabase.from("availability_slots").upsert(
+    {
+      business_id: businessId,
+      date,
+      start_time: startTime,
+      end_time: endTime,
+      status,
+      notes: String(formData.get("notes") ?? "").trim() || null,
+    },
+    { onConflict: "business_id,date,start_time" },
+  );
+
+  if (error) throw error;
+  revalidatePath("/businesses");
+}
+
+export async function deleteAvailabilitySlotWithFeedback(
+  _state: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  return withFeedback(() => deleteAvailabilitySlotCore(formData), "Disponibilidad eliminada.");
+}
+
+async function deleteAvailabilitySlotCore(formData: FormData) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) redirect("/login");
+
+  const { error } = await supabase
+    .from("availability_slots")
+    .delete()
+    .eq("id", String(formData.get("id") ?? ""));
+
+  if (error) throw error;
+  revalidatePath("/businesses");
+}
+
 export async function updateAppointmentStatus(formData: FormData) {
   await updateAppointmentStatusCore(formData);
 }
@@ -542,7 +669,16 @@ function parseQuoteStatus(value: string): QuoteStatus {
   return "draft";
 }
 
+function parseAvailabilityStatus(value: string): AvailabilityStatus {
+  if (value === "blocked" || value === "booked") return value;
+  return "available";
+}
+
 function parseLeadStatus(value: string): LeadStatus {
   if (value === "qualified" || value === "appointment" || value === "quoted") return value;
   return "new";
+}
+
+function isValidTime(value: string) {
+  return /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
 }

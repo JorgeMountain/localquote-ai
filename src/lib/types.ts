@@ -6,6 +6,8 @@ export type AppointmentStatus = "pending" | "confirmed" | "cancelled";
 
 export type QuoteStatus = "draft" | "sent" | "accepted" | "rejected";
 
+export type AvailabilityStatus = "available" | "blocked" | "booked";
+
 export type Business = {
   id: string;
   ownerId: string;
@@ -84,6 +86,24 @@ export type ChatRequest = {
   history?: Pick<Message, "role" | "body">[];
   conversationId?: string;
   customerId?: string;
+};
+
+export type BusinessHour = {
+  id: string;
+  businessId: string;
+  dayOfWeek: number;
+  opensAt: string;
+  closesAt: string;
+};
+
+export type AvailabilitySlot = {
+  id: string;
+  businessId: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  status: AvailabilityStatus;
+  notes?: string;
 };
 
 export type ChatResponse = {

@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
 import { generateAssistantReply } from "@/lib/ai";
 import { analyzeCommercialRequest, buildCommercialReply } from "@/lib/commercial";
-import { getPublicBusiness, getPublicFaqs } from "@/lib/db";
+import { getPublicBusiness, getPublicFaqs, getPublicSchedule } from "@/lib/db";
 import { WebChatProvider } from "@/lib/messaging";
 import { notifyBusinessOwner } from "@/lib/owner-notifications";
+import { buildAvailabilityReply, validateAppointmentAvailability } from "@/lib/schedule";
 import { createAnonRouteClient } from "@/lib/supabase/route";
 import type { ChatRequest } from "@/lib/types";
 
@@ -26,7 +27,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Business not found" }, { status: 404 });
   }
 
-  const businessFaqs = await getPublicFaqs(supabase, business.id);
+  const [businessFaqs, schedule] = await Promise.all([
+    getPublicFaqs(supabase, business.id),
+    getPublicSchedule(supabase, business.id),
+  ]);
   const customerId = input.customerId ?? crypto.randomUUID();
   const conversationId = input.conversationId ?? crypto.randomUUID();
   const history = (input.history ?? []).slice(-8).map((message) => ({
@@ -51,6 +55,17 @@ export async function POST(request: Request) {
   const hasExistingQuote = history.some(
     (message) => message.role === "assistant" && message.body.toLowerCase().includes("cotizacion estimada"),
   );
+  const appointmentAvailability =
+    analysis.appointmentDraft && !hasExistingAppointment
+      ? validateAppointmentAvailability({
+          appointment: {
+            businessId: business.id,
+            preferredDate: analysis.appointmentDraft.preferredDate,
+            preferredTime: analysis.appointmentDraft.preferredTime,
+          },
+          ...schedule,
+        })
+      : undefined;
 
   if (!input.customerId) {
     const { error } = await supabase.from("customers").insert({
@@ -79,8 +94,11 @@ export async function POST(request: Request) {
     !(hasExistingAppointment && analysis.appointmentDraft) && !(hasExistingQuote && analysis.quoteDraft);
   const reply = shouldUseFaqAnswer
     ? ai.reply
+    : appointmentAvailability && !appointmentAvailability.canCreateRequest
+      ? `${ai.reply} ${buildAvailabilityReply(appointmentAvailability)}`
     : shouldAppendCommercialReply
       ? buildCommercialReply(ai.reply, analysis)
+      + (appointmentAvailability?.message ? ` ${appointmentAvailability.message}` : "")
       : ai.reply;
 
   if (!input.conversationId) {
@@ -155,7 +173,7 @@ export async function POST(request: Request) {
   }
 
   const appointment =
-    analysis.appointmentDraft && !hasExistingAppointment
+    analysis.appointmentDraft && !hasExistingAppointment && (!appointmentAvailability || appointmentAvailability.canCreateRequest)
       ? {
           id: crypto.randomUUID(),
           businessId: business.id,

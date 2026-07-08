@@ -1,8 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type {
+  AvailabilitySlot,
   AppointmentRequest,
   Business,
   BusinessFaq,
+  BusinessHour,
   Conversation,
   Customer,
   Message,
@@ -79,6 +81,31 @@ type QuoteRow = {
   status: Quote["status"];
 };
 
+type ScheduleAppointmentRow = {
+  business_id: string;
+  preferred_date: string;
+  preferred_time: string;
+  status: AppointmentRequest["status"];
+};
+
+type BusinessHourRow = {
+  id: string;
+  business_id: string;
+  day_of_week: number;
+  opens_at: string;
+  closes_at: string;
+};
+
+type AvailabilitySlotRow = {
+  id: string;
+  business_id: string;
+  date: string;
+  start_time: string;
+  end_time: string;
+  status: AvailabilitySlot["status"];
+  notes: string | null;
+};
+
 export type DashboardData = {
   businesses: Business[];
   faqs: BusinessFaq[];
@@ -87,6 +114,8 @@ export type DashboardData = {
   messages: Message[];
   appointmentRequests: AppointmentRequest[];
   quotes: Quote[];
+  businessHours: BusinessHour[];
+  availabilitySlots: AvailabilitySlot[];
 };
 
 export async function getDashboardData(supabase: SupabaseClient, ownerId: string): Promise<DashboardData> {
@@ -110,10 +139,20 @@ export async function getDashboardData(supabase: SupabaseClient, ownerId: string
       messages: [],
       appointmentRequests: [],
       quotes: [],
+      businessHours: [],
+      availabilitySlots: [],
     };
   }
 
-  const [faqsResult, customersResult, conversationsResult, appointmentsResult, quotesResult] =
+  const [
+    faqsResult,
+    customersResult,
+    conversationsResult,
+    appointmentsResult,
+    quotesResult,
+    businessHoursResult,
+    availabilitySlotsResult,
+  ] =
     await Promise.all([
       supabase.from("business_faqs").select("*").in("business_id", businessIds),
       supabase.from("customers").select("*").in("business_id", businessIds).order("created_at", { ascending: false }),
@@ -124,9 +163,24 @@ export async function getDashboardData(supabase: SupabaseClient, ownerId: string
         .order("created_at", { ascending: false }),
       supabase.from("appointment_requests").select("*").in("business_id", businessIds),
       supabase.from("quotes").select("*").in("business_id", businessIds),
+      supabase.from("business_hours").select("*").in("business_id", businessIds).order("day_of_week"),
+      supabase
+        .from("availability_slots")
+        .select("*")
+        .in("business_id", businessIds)
+        .order("date")
+        .order("start_time"),
     ]);
 
-  for (const result of [faqsResult, customersResult, conversationsResult, appointmentsResult, quotesResult]) {
+  for (const result of [
+    faqsResult,
+    customersResult,
+    conversationsResult,
+    appointmentsResult,
+    quotesResult,
+    businessHoursResult,
+    availabilitySlotsResult,
+  ]) {
     if (result.error) throw result.error;
   }
 
@@ -146,6 +200,8 @@ export async function getDashboardData(supabase: SupabaseClient, ownerId: string
     messages: ((messagesResult.data ?? []) as MessageRow[]).map(mapMessage),
     appointmentRequests: ((appointmentsResult.data ?? []) as AppointmentRow[]).map(mapAppointment),
     quotes: ((quotesResult.data ?? []) as QuoteRow[]).map(mapQuote),
+    businessHours: ((businessHoursResult.data ?? []) as BusinessHourRow[]).map(mapBusinessHour),
+    availabilitySlots: ((availabilitySlotsResult.data ?? []) as AvailabilitySlotRow[]).map(mapAvailabilitySlot),
   };
 }
 
@@ -168,6 +224,28 @@ export async function getPublicFaqs(supabase: SupabaseClient, businessId: string
 
   if (error) throw error;
   return ((data ?? []) as FaqRow[]).map(mapFaq);
+}
+
+export async function getPublicSchedule(supabase: SupabaseClient, businessId: string) {
+  const [businessHoursResult, availabilitySlotsResult, appointmentsResult] = await Promise.all([
+    supabase.from("business_hours").select("*").eq("business_id", businessId),
+    supabase.from("availability_slots").select("*").eq("business_id", businessId),
+    supabase
+      .from("appointment_requests")
+      .select("business_id, preferred_date, preferred_time, status")
+      .eq("business_id", businessId)
+      .in("status", ["pending", "confirmed"]),
+  ]);
+
+  for (const result of [businessHoursResult, availabilitySlotsResult, appointmentsResult]) {
+    if (result.error) throw result.error;
+  }
+
+  return {
+    businessHours: ((businessHoursResult.data ?? []) as BusinessHourRow[]).map(mapBusinessHour),
+    availabilitySlots: ((availabilitySlotsResult.data ?? []) as AvailabilitySlotRow[]).map(mapAvailabilitySlot),
+    appointmentRequests: ((appointmentsResult.data ?? []) as ScheduleAppointmentRow[]).map(mapScheduleAppointment),
+  };
 }
 
 function mapBusiness(row: BusinessRow): Business {
@@ -251,5 +329,39 @@ function mapQuote(row: QuoteRow): Quote {
     maxPrice: row.max_price,
     notes: row.notes,
     status: row.status,
+  };
+}
+
+function mapScheduleAppointment(row: ScheduleAppointmentRow): AppointmentRequest {
+  return {
+    id: "",
+    businessId: row.business_id,
+    customerId: "",
+    service: "",
+    preferredDate: row.preferred_date,
+    preferredTime: row.preferred_time,
+    status: row.status,
+  };
+}
+
+function mapBusinessHour(row: BusinessHourRow): BusinessHour {
+  return {
+    id: row.id,
+    businessId: row.business_id,
+    dayOfWeek: row.day_of_week,
+    opensAt: row.opens_at.slice(0, 5),
+    closesAt: row.closes_at.slice(0, 5),
+  };
+}
+
+function mapAvailabilitySlot(row: AvailabilitySlotRow): AvailabilitySlot {
+  return {
+    id: row.id,
+    businessId: row.business_id,
+    date: row.date,
+    startTime: row.start_time.slice(0, 5),
+    endTime: row.end_time.slice(0, 5),
+    status: row.status,
+    notes: row.notes ?? undefined,
   };
 }

@@ -21,22 +21,29 @@ import { useActionState, useMemo, useState } from "react";
 import { useFormStatus } from "react-dom";
 import {
   createBusinessWithFeedback,
+  createAvailabilitySlotWithFeedback,
   createFaqWithFeedback,
+  deleteAvailabilitySlotWithFeedback,
   deleteBusinessWithFeedback,
   deleteFaqWithFeedback,
+  saveBusinessHoursWithFeedback,
   updateBusinessWithFeedback,
   updateFaqWithFeedback,
 } from "@/app/actions";
 import { ActionMessage } from "@/components/ActionForms";
-import type { Business, BusinessFaq } from "@/lib/types";
+import type { AvailabilitySlot, Business, BusinessFaq, BusinessHour } from "@/lib/types";
 
 export function BusinessWorkspace({
   businesses,
   faqs,
+  businessHours,
+  availabilitySlots,
   whatsappBusinessSlug,
 }: {
   businesses: Business[];
   faqs: BusinessFaq[];
+  businessHours: BusinessHour[];
+  availabilitySlots: AvailabilitySlot[];
   whatsappBusinessSlug: string;
 }) {
   const [selectedId, setSelectedId] = useState(businesses[0]?.id ?? "");
@@ -46,7 +53,15 @@ export function BusinessWorkspace({
     () => (selectedBusiness ? faqs.filter((faq) => faq.businessId === selectedBusiness.id) : []),
     [faqs, selectedBusiness],
   );
-  const completion = selectedBusiness ? getCompletion(selectedBusiness, businessFaqs.length) : [];
+  const selectedBusinessHours = useMemo(
+    () => (selectedBusiness ? businessHours.filter((hour) => hour.businessId === selectedBusiness.id) : []),
+    [businessHours, selectedBusiness],
+  );
+  const selectedAvailabilitySlots = useMemo(
+    () => (selectedBusiness ? availabilitySlots.filter((slot) => slot.businessId === selectedBusiness.id) : []),
+    [availabilitySlots, selectedBusiness],
+  );
+  const completion = selectedBusiness ? getCompletion(selectedBusiness, businessFaqs.length, selectedBusinessHours.length) : [];
 
   return (
     <div className="grid gap-6">
@@ -151,8 +166,22 @@ export function BusinessWorkspace({
 
                 <section className="rounded-xl border border-black/10 bg-white p-5 shadow-sm">
                   <FormHeader
-                    icon={HelpCircle}
+                    icon={Clock3}
                     eyebrow="Paso 2"
+                    title="Agenda y disponibilidad"
+                    description="Define horarios laborales y excepciones. El bot valida contra esto antes de registrar citas."
+                  />
+                  <ScheduleEditor
+                    business={selectedBusiness}
+                    businessHours={selectedBusinessHours}
+                    availabilitySlots={selectedAvailabilitySlots}
+                  />
+                </section>
+
+                <section className="rounded-xl border border-black/10 bg-white p-5 shadow-sm">
+                  <FormHeader
+                    icon={HelpCircle}
+                    eyebrow="Paso 3"
                     title="Preguntas frecuentes"
                     description="Agrega respuestas aprobadas. El bot las usa como fuente principal antes de improvisar."
                   />
@@ -174,7 +203,7 @@ export function BusinessWorkspace({
                 <section className="rounded-xl border border-black/10 bg-[#111111] p-5 text-white shadow-sm">
                   <FormHeader
                     icon={Sparkles}
-                    eyebrow="Paso 3"
+                    eyebrow="Paso 4"
                     title="Prueba el asistente"
                     description="Cuando termines la configuracion, prueba la pagina publica o escribe al WhatsApp conectado."
                     dark
@@ -303,6 +332,132 @@ function CompletionCard({
         ))}
       </div>
     </section>
+  );
+}
+
+function ScheduleEditor({
+  business,
+  businessHours,
+  availabilitySlots,
+}: {
+  business: Business;
+  businessHours: BusinessHour[];
+  availabilitySlots: AvailabilitySlot[];
+}) {
+  const [hoursState, hoursAction] = useActionState(saveBusinessHoursWithFeedback, null);
+  const [slotState, slotAction] = useActionState(createAvailabilitySlotWithFeedback, null);
+
+  return (
+    <div className="mt-5 grid gap-5">
+      <form action={hoursAction} className="rounded-lg border border-black/10 bg-[#f8f6f1] p-4">
+        <input type="hidden" name="business_id" value={business.id} />
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h3 className="font-semibold">Horario semanal</h3>
+            <p className="mt-1 text-sm text-[#706d62]">Marca los dias abiertos y guarda rangos de atencion.</p>
+          </div>
+          <SubmitButton icon={Save} label="Guardar horario" />
+        </div>
+        <div className="mt-4 grid gap-3">
+          {weekDays.map((day) => {
+            const current = businessHours.find((hour) => hour.dayOfWeek === day.value);
+            return (
+              <div key={day.value} className="grid gap-3 rounded-lg border border-black/10 bg-white p-3 md:grid-cols-[1fr_1fr_1fr] md:items-center">
+                <label className="flex items-center gap-2 text-sm font-semibold">
+                  <input type="checkbox" name={`day_${day.value}_enabled`} defaultChecked={Boolean(current)} />
+                  {day.label}
+                </label>
+                <input
+                  className={inputClass("default")}
+                  type="time"
+                  name={`day_${day.value}_opens`}
+                  defaultValue={current?.opensAt ?? "09:00"}
+                />
+                <input
+                  className={inputClass("default")}
+                  type="time"
+                  name={`day_${day.value}_closes`}
+                  defaultValue={current?.closesAt ?? "18:00"}
+                />
+              </div>
+            );
+          })}
+        </div>
+        <div className="mt-4">
+          <ActionMessage state={hoursState} />
+        </div>
+      </form>
+
+      <form action={slotAction} className="rounded-lg border border-black/10 bg-[#f8f6f1] p-4">
+        <input type="hidden" name="business_id" value={business.id} />
+        <div>
+          <h3 className="font-semibold">Excepciones por fecha</h3>
+          <p className="mt-1 text-sm text-[#706d62]">
+            Usa esto para abrir un cupo especial, bloquear una hora o marcar una hora como ocupada.
+          </p>
+        </div>
+        <div className="mt-4 grid gap-3 md:grid-cols-2">
+          <input className={inputClass("white")} type="date" name="date" required />
+          <select className={inputClass("white")} name="status" defaultValue="blocked">
+            <option value="available">Disponible especial</option>
+            <option value="blocked">Bloqueado</option>
+            <option value="booked">Ocupado</option>
+          </select>
+          <input className={inputClass("white")} type="time" name="start_time" defaultValue="09:00" required />
+          <input className={inputClass("white")} type="time" name="end_time" defaultValue="09:30" required />
+          <input className={inputClass("white", "md:col-span-2")} name="notes" placeholder="Nota opcional" />
+        </div>
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <SubmitButton icon={Plus} label="Agregar excepcion" />
+          <ActionMessage state={slotState} />
+        </div>
+      </form>
+
+      <div className="rounded-lg border border-black/10 bg-white p-4">
+        <h3 className="font-semibold">Excepciones guardadas</h3>
+        <div className="mt-3 grid gap-2">
+          {availabilitySlots.map((slot) => (
+            <AvailabilitySlotRow key={slot.id} slot={slot} />
+          ))}
+          {availabilitySlots.length === 0 && (
+            <p className="rounded-lg border border-dashed border-black/15 bg-[#f8f6f1] p-4 text-sm text-[#706d62]">
+              No hay excepciones. El bot usara solo el horario semanal y las citas existentes.
+            </p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AvailabilitySlotRow({ slot }: { slot: AvailabilitySlot }) {
+  const [state, formAction] = useActionState(deleteAvailabilitySlotWithFeedback, null);
+  const statusLabel: Record<AvailabilitySlot["status"], string> = {
+    available: "Disponible",
+    blocked: "Bloqueado",
+    booked: "Ocupado",
+  };
+
+  return (
+    <article className="flex flex-col gap-3 rounded-lg border border-black/10 bg-[#f8f6f1] p-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="text-sm">
+        <p className="font-semibold">
+          {slot.date} · {slot.startTime} - {slot.endTime}
+        </p>
+        <p className="mt-1 text-[#706d62]">
+          {statusLabel[slot.status]}
+          {slot.notes ? ` · ${slot.notes}` : ""}
+        </p>
+      </div>
+      <form action={formAction} className="flex flex-wrap items-center gap-2">
+        <input type="hidden" name="id" value={slot.id} />
+        <button className="inline-flex h-9 items-center gap-2 rounded-lg border border-black/15 bg-white px-3 text-sm font-semibold">
+          <Trash2 size={15} />
+          Eliminar
+        </button>
+        <ActionMessage state={state} compact />
+      </form>
+    </article>
   );
 }
 
@@ -664,12 +819,22 @@ function StepPill({ number, label, done }: { number: string; label: string; done
   );
 }
 
-function getCompletion(business: Business, faqCount: number) {
+const weekDays = [
+  { value: 0, label: "Domingo" },
+  { value: 1, label: "Lunes" },
+  { value: 2, label: "Martes" },
+  { value: 3, label: "Miercoles" },
+  { value: 4, label: "Jueves" },
+  { value: 5, label: "Viernes" },
+  { value: 6, label: "Sabado" },
+];
+
+function getCompletion(business: Business, faqCount: number, businessHourCount: number) {
   return [
     { label: "Nombre y contacto", done: Boolean(business.name && business.phone) },
     { label: "Descripcion del negocio", done: business.description.trim().length > 20 },
     { label: "Servicios y precios", done: business.services.length > 0 },
-    { label: "Horarios disponibles", done: business.hours.trim().length > 5 },
+    { label: "Agenda estructurada", done: businessHourCount > 0 },
     { label: "Reglas del bot", done: business.rules.length > 0 },
     { label: "FAQs cargadas", done: faqCount > 0 },
   ];
