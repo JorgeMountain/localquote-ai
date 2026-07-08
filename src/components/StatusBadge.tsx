@@ -9,6 +9,7 @@ const labels: Record<string, string> = {
   draft: "Borrador",
   sent: "Enviada",
   accepted: "Aceptada",
+  approved: "Aprobado",
   rejected: "Rechazada",
   faq: "FAQ",
   quote: "Cotizacion",

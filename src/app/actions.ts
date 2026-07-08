@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { businesses, faqs } from "@/lib/seed";
 import { createClient } from "@/lib/supabase/server";
@@ -10,6 +11,7 @@ import type {
   BusinessLinkPurpose,
   BusinessType,
   LeadStatus,
+  PaymentReceiptStatus,
   QuoteStatus,
 } from "@/lib/types";
 
@@ -17,6 +19,75 @@ export type ActionState = {
   status: "success" | "error";
   message: string;
 } | null;
+
+export async function sendPasswordResetWithFeedback(
+  _state: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  return withFeedback(() => sendPasswordResetCore(formData), "Enlace de cambio de contraseña enviado.");
+}
+
+async function sendPasswordResetCore(formData: FormData) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) redirect("/login");
+  const viewerProfile = await getViewerProfile(supabase, user.id);
+  if (viewerProfile.role !== "platform_admin") throw new Error("Acceso exclusivo del administrador.");
+
+  const email = String(formData.get("email") ?? "").trim().toLowerCase();
+  if (!email || !email.includes("@")) throw new Error("Correo inválido.");
+
+  const requestHeaders = await headers();
+  const origin = requestHeaders.get("origin") ?? process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: `${origin}/auth/callback?next=/update-password`,
+  });
+
+  if (error) throw error;
+}
+
+export async function updatePaymentReceiptStatusWithFeedback(
+  _state: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const status = parsePaymentReceiptStatus(String(formData.get("status") ?? ""));
+  const labels: Record<PaymentReceiptStatus, string> = {
+    pending: "Comprobante marcado como pendiente.",
+    approved: "Pago aprobado.",
+    rejected: "Comprobante rechazado.",
+  };
+  return withFeedback(() => updatePaymentReceiptStatusCore(formData, status), labels[status]);
+}
+
+async function updatePaymentReceiptStatusCore(formData: FormData, status: PaymentReceiptStatus) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) redirect("/login");
+  const viewerProfile = await getViewerProfile(supabase, user.id);
+  if (viewerProfile.role !== "platform_admin") throw new Error("Acceso exclusivo del administrador.");
+
+  const { error } = await supabase
+    .from("payment_receipts")
+    .update({
+      status,
+      review_notes: String(formData.get("review_notes") ?? "").trim(),
+      reviewed_by: user.id,
+      reviewed_at: new Date().toISOString(),
+    })
+    .eq("id", String(formData.get("id") ?? ""))
+    .select("id")
+    .single();
+
+  if (error) throw error;
+  revalidatePath("/payments");
+  revalidatePath("/admin");
+}
 
 export async function seedDemoData() {
   const supabase = await createClient();
@@ -743,6 +814,11 @@ function parseQuoteStatus(value: string): QuoteStatus {
 function parseAvailabilityStatus(value: string): AvailabilityStatus {
   if (value === "blocked" || value === "booked") return value;
   return "available";
+}
+
+function parsePaymentReceiptStatus(value: string): PaymentReceiptStatus {
+  if (value === "approved" || value === "rejected") return value;
+  return "pending";
 }
 
 function parseBusinessLinkPurpose(value: string): BusinessLinkPurpose {

@@ -9,6 +9,7 @@ import type {
   Conversation,
   Customer,
   Message,
+  PaymentReceipt,
   Profile,
   Quote,
 } from "./types";
@@ -125,6 +126,23 @@ type AvailabilitySlotRow = {
   notes: string | null;
 };
 
+type PaymentReceiptRow = {
+  id: string;
+  business_id: string;
+  uploaded_by: string;
+  reviewed_by: string | null;
+  object_path: string;
+  original_name: string;
+  mime_type: string;
+  amount_cents: number | null;
+  billing_period: string | null;
+  notes: string;
+  review_notes: string;
+  status: PaymentReceipt["status"];
+  created_at: string;
+  reviewed_at: string | null;
+};
+
 export type DashboardData = {
   viewerProfile: Profile;
   profiles: Profile[];
@@ -138,6 +156,7 @@ export type DashboardData = {
   businessHours: BusinessHour[];
   availabilitySlots: AvailabilitySlot[];
   businessLinks: BusinessLink[];
+  paymentReceipts: PaymentReceipt[];
 };
 
 export async function getDashboardData(supabase: SupabaseClient, ownerId: string): Promise<DashboardData> {
@@ -172,6 +191,7 @@ export async function getDashboardData(supabase: SupabaseClient, ownerId: string
       businessHours: [],
       availabilitySlots: [],
       businessLinks: [],
+      paymentReceipts: [],
     };
   }
 
@@ -184,6 +204,7 @@ export async function getDashboardData(supabase: SupabaseClient, ownerId: string
     businessHoursResult,
     availabilitySlotsResult,
     businessLinksResult,
+    paymentReceiptsResult,
   ] =
     await Promise.all([
       supabase.from("business_faqs").select("*").in("business_id", businessIds),
@@ -203,6 +224,7 @@ export async function getDashboardData(supabase: SupabaseClient, ownerId: string
         .order("date")
         .order("start_time"),
       supabase.from("business_links").select("*").in("business_id", businessIds).order("created_at"),
+      supabase.from("payment_receipts").select("*").in("business_id", businessIds).order("created_at", { ascending: false }),
     ]);
 
   for (const result of [
@@ -214,6 +236,7 @@ export async function getDashboardData(supabase: SupabaseClient, ownerId: string
     businessHoursResult,
     availabilitySlotsResult,
     businessLinksResult,
+    paymentReceiptsResult,
   ]) {
     if (result.error) throw result.error;
   }
@@ -239,6 +262,7 @@ export async function getDashboardData(supabase: SupabaseClient, ownerId: string
     businessHours: ((businessHoursResult.data ?? []) as BusinessHourRow[]).map(mapBusinessHour),
     availabilitySlots: ((availabilitySlotsResult.data ?? []) as AvailabilitySlotRow[]).map(mapAvailabilitySlot),
     businessLinks: ((businessLinksResult.data ?? []) as BusinessLinkRow[]).map(mapBusinessLink),
+    paymentReceipts: ((paymentReceiptsResult.data ?? []) as PaymentReceiptRow[]).map(mapPaymentReceipt),
   };
 }
 
@@ -419,6 +443,25 @@ function mapBusinessLink(row: BusinessLinkRow): BusinessLink {
     purpose: row.purpose,
     notes: row.notes,
     isActive: row.is_active,
+  };
+}
+
+function mapPaymentReceipt(row: PaymentReceiptRow): PaymentReceipt {
+  return {
+    id: row.id,
+    businessId: row.business_id,
+    uploadedBy: row.uploaded_by,
+    reviewedBy: row.reviewed_by ?? undefined,
+    objectPath: row.object_path,
+    originalName: row.original_name,
+    mimeType: row.mime_type,
+    amountCents: row.amount_cents ?? undefined,
+    billingPeriod: row.billing_period ?? undefined,
+    notes: row.notes,
+    reviewNotes: row.review_notes,
+    status: row.status,
+    createdAt: row.created_at,
+    reviewedAt: row.reviewed_at ?? undefined,
   };
 }
 

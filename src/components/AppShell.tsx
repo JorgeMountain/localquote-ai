@@ -7,6 +7,7 @@ import {
   Inbox,
   LayoutDashboard,
   MessageCircle,
+  ReceiptText,
   ShieldCheck,
 } from "lucide-react";
 import type { Profile } from "@/lib/types";
@@ -17,6 +18,7 @@ const navItems = [
   { href: "/conversations", label: "Conversaciones", icon: Inbox },
   { href: "/appointments", label: "Citas", icon: CalendarClock },
   { href: "/quotes", label: "Cotizaciones", icon: FileText },
+  { href: "/payments", label: "Pagos", icon: ReceiptText },
 ];
 
 export function AppShell({ children, viewerProfile }: { children: React.ReactNode; viewerProfile?: Profile }) {

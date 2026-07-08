@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { AppointmentStatusForm, QuickAppointmentButton } from "@/components/ActionForms";
 import { AppShell } from "@/components/AppShell";
-import { BusinessFilter } from "@/components/BusinessFilter";
+import { BusinessSelectFilter } from "@/components/BusinessSelectFilter";
 import { OnboardingPanel } from "@/components/OnboardingPanel";
 import { StatusBadge } from "@/components/StatusBadge";
 import { getDashboardData } from "@/lib/db";
@@ -39,7 +39,12 @@ export default async function AppointmentsPage({ searchParams }: AppointmentsPag
         <OnboardingPanel userEmail={user.email} />
       ) : (
         <div className="grid gap-6">
-          <BusinessFilter businesses={data.businesses} activeBusinessId={activeBusinessId} basePath="/appointments" />
+          <BusinessSelectFilter
+            businesses={data.businesses}
+            activeBusinessId={activeBusinessId}
+            basePath="/appointments"
+            allLabel="Todas las solicitudes"
+          />
           <div className="overflow-x-auto rounded-md border border-black/10 bg-white p-5">
             <table className="w-full min-w-[820px] text-left text-sm">
               <thead className="text-xs uppercase tracking-[0.18em] text-[#706d62]">

@@ -1,15 +1,17 @@
 "use client";
 
-import { Check, Send, Save } from "lucide-react";
+import { Check, KeyRound, Send, Save } from "lucide-react";
 import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
 import {
   updateAppointmentStatusWithFeedback,
   updateCustomerStatusWithFeedback,
+  updatePaymentReceiptStatusWithFeedback,
   updateQuoteStatusWithFeedback,
+  sendPasswordResetWithFeedback,
   type ActionState,
 } from "@/app/actions";
-import type { AppointmentStatus, LeadStatus, QuoteStatus } from "@/lib/types";
+import type { AppointmentStatus, LeadStatus, PaymentReceiptStatus, QuoteStatus } from "@/lib/types";
 
 export function CustomerStatusForm({ id, status }: { id: string; status: LeadStatus }) {
   const [state, formAction] = useActionState(updateCustomerStatusWithFeedback, null);
@@ -66,6 +68,56 @@ export function QuoteStatusForm({ id, status }: { id: string; status: QuoteStatu
         <SubmitButton label="Guardar" />
       </div>
       <ActionMessage state={state} />
+    </form>
+  );
+}
+
+export function PaymentReceiptStatusForm({
+  id,
+  status,
+  reviewNotes,
+}: {
+  id: string;
+  status: PaymentReceiptStatus;
+  reviewNotes: string;
+}) {
+  const [state, formAction] = useActionState(updatePaymentReceiptStatusWithFeedback, null);
+
+  return (
+    <form action={formAction} className="grid min-w-64 gap-2">
+      <input type="hidden" name="id" value={id} />
+      <select
+        className="h-9 rounded-md border border-black/15 bg-[#f8f6f1] px-2 text-sm"
+        name="status"
+        defaultValue={status}
+      >
+        <option value="pending">Pendiente</option>
+        <option value="approved">Aprobado</option>
+        <option value="rejected">Rechazado</option>
+      </select>
+      <input
+        className="h-9 rounded-md border border-black/15 bg-white px-2 text-sm"
+        name="review_notes"
+        defaultValue={reviewNotes}
+        placeholder="Nota de revisión opcional"
+      />
+      <SubmitButton label="Guardar revisión" />
+      <ActionMessage state={state} compact />
+    </form>
+  );
+}
+
+export function PasswordResetForm({ email }: { email: string }) {
+  const [state, formAction] = useActionState(sendPasswordResetWithFeedback, null);
+
+  return (
+    <form action={formAction} className="grid gap-2">
+      <input type="hidden" name="email" value={email} />
+      <button className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-black/15 bg-white px-3 text-sm font-semibold">
+        <KeyRound size={15} />
+        Enviar restablecimiento
+      </button>
+      <ActionMessage state={state} compact />
     </form>
   );
 }

@@ -19,6 +19,8 @@ export type AvailabilityStatus = "available" | "blocked" | "booked";
 
 export type BusinessLinkPurpose = "general" | "booking" | "payment" | "catalog" | "location" | "support";
 
+export type PaymentReceiptStatus = "pending" | "approved" | "rejected";
+
 export type Business = {
   id: string;
   ownerId: string;
@@ -125,6 +127,23 @@ export type AvailabilitySlot = {
   endTime: string;
   status: AvailabilityStatus;
   notes?: string;
+};
+
+export type PaymentReceipt = {
+  id: string;
+  businessId: string;
+  uploadedBy: string;
+  reviewedBy?: string;
+  objectPath: string;
+  originalName: string;
+  mimeType: string;
+  amountCents?: number;
+  billingPeriod?: string;
+  notes: string;
+  reviewNotes: string;
+  status: PaymentReceiptStatus;
+  createdAt: string;
+  reviewedAt?: string;
 };
 
 export type ChatResponse = {

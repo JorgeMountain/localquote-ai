@@ -1,4 +1,6 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
+import { PasswordResetForm } from "@/components/ActionForms";
 import { AppShell } from "@/components/AppShell";
 import { MetricCard } from "@/components/MetricCard";
 import { getDashboardData } from "@/lib/db";
@@ -34,6 +36,59 @@ export default async function AdminPage() {
         <MetricCard label="Dueños negocio" value={String(ownerProfiles.length)} detail="Usuarios tipo cliente." icon={UsersRound} />
         <MetricCard label="Conversaciones" value={String(data.conversations.length)} detail="Web y WhatsApp." icon={MessageSquareText} />
         <MetricCard label="Admins" value={String(data.profiles.length - ownerProfiles.length)} detail="Usuarios plataforma." icon={ShieldCheck} />
+      </section>
+
+      <section className="mt-6 rounded-xl border border-black/10 bg-white p-5 shadow-sm">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h2 className="text-2xl font-semibold">Usuarios de la plataforma</h2>
+            <p className="mt-1 text-sm text-[#706d62]">
+              Las contraseñas están cifradas por Supabase y no son visibles. Puedes enviar un enlace seguro para cambiarla.
+            </p>
+          </div>
+          <Link className="text-sm font-semibold underline underline-offset-4" href="/payments">
+            Revisar comprobantes
+          </Link>
+        </div>
+        <div className="mt-4 overflow-x-auto">
+          <table className="w-full min-w-[760px] text-left text-sm">
+            <thead className="border-b border-black/10 text-xs uppercase tracking-[0.14em] text-[#706d62]">
+              <tr>
+                <th className="py-3 pr-4">Usuario</th>
+                <th className="py-3 pr-4">Correo</th>
+                <th className="py-3 pr-4">Perfil</th>
+                <th className="py-3 pr-4">Negocios</th>
+                <th className="py-3">Contraseña</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.profiles.map((profile) => {
+                const profileBusinesses = data.businesses.filter((business) => business.ownerId === profile.id);
+                return (
+                  <tr key={profile.id} className="border-b border-black/5 align-top">
+                    <td className="py-3 pr-4 font-semibold">{profile.fullName ?? "Sin nombre"}</td>
+                    <td className="py-3 pr-4 text-[#706d62]">{profile.email ?? "Sin correo"}</td>
+                    <td className="py-3 pr-4">
+                      {profile.role === "platform_admin" ? "Administrador" : "Dueño de negocio"}
+                    </td>
+                    <td className="py-3 pr-4">
+                      {profileBusinesses.length > 0
+                        ? profileBusinesses.map((business) => business.name).join(", ")
+                        : "Sin negocio asignado"}
+                    </td>
+                    <td className="py-3">
+                      {profile.email ? (
+                        <PasswordResetForm email={profile.email} />
+                      ) : (
+                        <span className="text-[#706d62]">No disponible</span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       </section>
 
       <section className="mt-6 rounded-xl border border-black/10 bg-white p-5 shadow-sm">
