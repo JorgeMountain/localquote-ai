@@ -34,10 +34,12 @@ import {
   updateFaqWithFeedback,
 } from "@/app/actions";
 import { ActionMessage } from "@/components/ActionForms";
-import type { AvailabilitySlot, Business, BusinessFaq, BusinessHour, BusinessLink } from "@/lib/types";
+import type { AvailabilitySlot, Business, BusinessFaq, BusinessHour, BusinessLink, Profile } from "@/lib/types";
 
 export function BusinessWorkspace({
   businesses,
+  profiles,
+  viewerProfile,
   faqs,
   businessHours,
   availabilitySlots,
@@ -45,6 +47,8 @@ export function BusinessWorkspace({
   whatsappBusinessSlug,
 }: {
   businesses: Business[];
+  profiles: Profile[];
+  viewerProfile: Profile;
   faqs: BusinessFaq[];
   businessHours: BusinessHour[];
   availabilitySlots: AvailabilitySlot[];
@@ -79,7 +83,7 @@ export function BusinessWorkspace({
       {businesses.length === 0 ? (
         <div className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
           <ManualSetupGuide />
-          <CreateBusinessForm variant="empty" />
+          <CreateBusinessForm variant="empty" profiles={profiles} viewerProfile={viewerProfile} />
         </div>
       ) : (
         <>
@@ -113,7 +117,7 @@ export function BusinessWorkspace({
             </div>
           </section>
 
-          <CreateBusinessForm variant="compact" />
+          <CreateBusinessForm variant="compact" profiles={profiles} viewerProfile={viewerProfile} />
 
           {selectedBusiness && (
             <div className="grid gap-6 xl:grid-cols-[0.82fr_1.18fr]">
@@ -574,7 +578,15 @@ function DangerZone({ business }: { business: Business }) {
   );
 }
 
-function CreateBusinessForm({ variant }: { variant: "empty" | "compact" }) {
+function CreateBusinessForm({
+  variant,
+  profiles,
+  viewerProfile,
+}: {
+  variant: "empty" | "compact";
+  profiles: Profile[];
+  viewerProfile: Profile;
+}) {
   const [state, formAction] = useActionState(createBusinessWithFeedback, null);
   const compact = variant === "compact";
 
@@ -585,7 +597,7 @@ function CreateBusinessForm({ variant }: { variant: "empty" | "compact" }) {
         <p className="mt-3 text-sm leading-6 text-[#706d62]">
           Este formulario crea un registro nuevo. El negocio activo de arriba seguira igual hasta que lo selecciones.
         </p>
-        <CreateBusinessFields state={state} formAction={formAction} compact />
+        <CreateBusinessFields state={state} formAction={formAction} compact profiles={profiles} viewerProfile={viewerProfile} />
       </details>
     );
   }
@@ -598,7 +610,7 @@ function CreateBusinessForm({ variant }: { variant: "empty" | "compact" }) {
         title="Crea tu primer negocio"
         description="Llena lo minimo para que el bot tenga una fuente de verdad desde el inicio."
       />
-      <CreateBusinessFields state={state} formAction={formAction} />
+      <CreateBusinessFields state={state} formAction={formAction} profiles={profiles} viewerProfile={viewerProfile} />
     </form>
   );
 }
@@ -607,13 +619,30 @@ function CreateBusinessFields({
   state,
   formAction,
   compact,
+  profiles,
+  viewerProfile,
 }: {
   state: Parameters<typeof ActionMessage>[0]["state"];
   formAction: (payload: FormData) => void;
   compact?: boolean;
+  profiles: Profile[];
+  viewerProfile: Profile;
 }) {
+  const ownerProfiles = profiles.filter((profile) => profile.role === "business_owner" || profile.id === viewerProfile.id);
   const fields = (
     <>
+      {viewerProfile.role === "platform_admin" && (
+        <label className="grid gap-1 text-xs font-semibold uppercase tracking-[0.14em] text-[#706d62] md:col-span-2">
+          Dueño del negocio
+          <select className={inputClass("white")} name="owner_id" defaultValue={ownerProfiles[0]?.id ?? viewerProfile.id}>
+            {ownerProfiles.map((profile) => (
+              <option key={profile.id} value={profile.id}>
+                {profile.email ?? profile.fullName ?? profile.id} · {profile.role === "platform_admin" ? "admin" : "negocio"}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
       <input className={inputClass("white")} name="name" placeholder="Nombre del negocio" required />
       <input className={inputClass("white")} name="slug" placeholder="slug-publico opcional" />
       <select className={inputClass("white")} name="type" defaultValue="repair" aria-label="Plantilla del bot">

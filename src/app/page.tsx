@@ -41,7 +41,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
   const totalQuoted = scopedQuotes.reduce((sum, quote) => sum + quote.maxPrice, 0);
 
   return (
-    <AppShell>
+    <AppShell viewerProfile={data.viewerProfile}>
       {data.businesses.length === 0 ? (
         <OnboardingPanel userEmail={user.email} />
       ) : (

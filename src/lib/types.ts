@@ -1,5 +1,14 @@
 export type BusinessType = "dentist" | "repair";
 
+export type ProfileRole = "platform_admin" | "business_owner";
+
+export type Profile = {
+  id: string;
+  email?: string;
+  fullName?: string;
+  role: ProfileRole;
+};
+
 export type LeadStatus = "new" | "qualified" | "appointment" | "quoted";
 
 export type AppointmentStatus = "pending" | "confirmed" | "cancelled";

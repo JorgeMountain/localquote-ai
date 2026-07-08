@@ -53,7 +53,7 @@ export default async function ConversationsPage({ searchParams }: ConversationsP
   const relatedQuotes = selectedCustomer ? data.quotes.filter((quote) => quote.customerId === selectedCustomer.id) : [];
 
   return (
-    <AppShell>
+    <AppShell viewerProfile={data.viewerProfile}>
       <header className="mb-6 border-b border-black/10 pb-6">
         <h1 className="text-4xl font-semibold tracking-normal">Conversaciones</h1>
         <p className="mt-2 text-[#706d62]">Detalle de lead, mensajes y siguientes acciones comerciales.</p>

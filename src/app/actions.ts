@@ -153,6 +153,7 @@ async function updateBusinessCore(formData: FormData) {
   if (!user) redirect("/login");
 
   const id = String(formData.get("id") ?? "");
+  await assertCanManageBusiness(supabase, id, user.id);
   const services = splitLinesOrCommas(String(formData.get("services") ?? ""));
   const rules = splitLinesOrCommas(String(formData.get("rules") ?? ""));
 
@@ -167,8 +168,7 @@ async function updateBusinessCore(formData: FormData) {
       phone: String(formData.get("phone") ?? ""),
       rules,
     })
-    .eq("id", id)
-    .eq("owner_id", user.id);
+    .eq("id", id);
 
   if (error) throw error;
   revalidatePath("/");
@@ -190,8 +190,9 @@ async function deleteBusinessCore(formData: FormData) {
   if (!id || confirmation !== name) {
     throw new Error("Para eliminar, escribe exactamente el nombre del negocio.");
   }
+  await assertCanManageBusiness(supabase, id, user.id);
 
-  const { error } = await supabase.from("businesses").delete().eq("id", id).eq("owner_id", user.id);
+  const { error } = await supabase.from("businesses").delete().eq("id", id);
 
   if (error) throw error;
   revalidatePath("/");
@@ -217,13 +218,16 @@ async function createBusinessCore(formData: FormData) {
 
   if (!user) redirect("/login");
   await ensureProfile(supabase, user.id, user.email);
+  const viewerProfile = await getViewerProfile(supabase, user.id);
 
   const name = String(formData.get("name") ?? "").trim();
   const type = parseBusinessType(String(formData.get("type") ?? "repair"));
   const slug = slugify(String(formData.get("slug") ?? "") || name);
+  const requestedOwnerId = String(formData.get("owner_id") ?? "").trim();
+  const ownerId = viewerProfile.role === "platform_admin" && requestedOwnerId ? requestedOwnerId : user.id;
 
   const { error } = await supabase.from("businesses").insert({
-    owner_id: user.id,
+    owner_id: ownerId,
     name,
     slug,
     type,
@@ -331,7 +335,7 @@ async function createBusinessLinkCore(formData: FormData) {
   if (!user) redirect("/login");
 
   const businessId = String(formData.get("business_id") ?? "");
-  await assertBusinessOwner(supabase, businessId, user.id);
+  await assertCanManageBusiness(supabase, businessId, user.id);
 
   const { error } = await supabase.from("business_links").insert({
     business_id: businessId,
@@ -404,14 +408,7 @@ async function saveBusinessHoursCore(formData: FormData) {
   if (!user) redirect("/login");
 
   const businessId = String(formData.get("business_id") ?? "");
-  const { data: business, error: businessError } = await supabase
-    .from("businesses")
-    .select("id")
-    .eq("id", businessId)
-    .eq("owner_id", user.id)
-    .single();
-
-  if (businessError || !business) throw businessError ?? new Error("Negocio no encontrado.");
+  await assertCanManageBusiness(supabase, businessId, user.id);
 
   const hours: { business_id: string; day_of_week: number; opens_at: string; closes_at: string }[] = [];
 
@@ -469,14 +466,7 @@ async function createAvailabilitySlotCore(formData: FormData) {
     throw new Error("Completa fecha, hora inicio y hora fin validas.");
   }
 
-  const { data: business, error: businessError } = await supabase
-    .from("businesses")
-    .select("id")
-    .eq("id", businessId)
-    .eq("owner_id", user.id)
-    .single();
-
-  if (businessError || !business) throw businessError ?? new Error("Negocio no encontrado.");
+  await assertCanManageBusiness(supabase, businessId, user.id);
 
   const { error } = await supabase.from("availability_slots").upsert(
     {
@@ -712,6 +702,7 @@ async function createDemoLead(
 async function ensureProfile(supabase: Awaited<ReturnType<typeof createClient>>, userId: string, email?: string) {
   const { error } = await supabase.from("profiles").upsert({
     id: userId,
+    email: email ?? null,
     full_name: email ? email.split("@")[0] : "Owner",
   });
 
@@ -783,11 +774,29 @@ function normalizeHttpUrl(value: string) {
   }
 }
 
-async function assertBusinessOwner(
+async function getViewerProfile(supabase: Awaited<ReturnType<typeof createClient>>, userId: string) {
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("id, role")
+    .eq("id", userId)
+    .single();
+
+  if (error || !data) throw error ?? new Error("Perfil no encontrado.");
+  return data as { id: string; role: "platform_admin" | "business_owner" };
+}
+
+async function assertCanManageBusiness(
   supabase: Awaited<ReturnType<typeof createClient>>,
   businessId: string,
   userId: string,
 ) {
+  const viewerProfile = await getViewerProfile(supabase, userId);
+  if (viewerProfile.role === "platform_admin") {
+    const { data, error } = await supabase.from("businesses").select("id").eq("id", businessId).single();
+    if (error || !data) throw error ?? new Error("Negocio no encontrado.");
+    return;
+  }
+
   const { data, error } = await supabase
     .from("businesses")
     .select("id")

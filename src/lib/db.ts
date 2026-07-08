@@ -9,8 +9,16 @@ import type {
   Conversation,
   Customer,
   Message,
+  Profile,
   Quote,
 } from "./types";
+
+type ProfileRow = {
+  id: string;
+  email: string | null;
+  full_name: string | null;
+  role: Profile["role"];
+};
 
 type BusinessRow = {
   id: string;
@@ -118,6 +126,8 @@ type AvailabilitySlotRow = {
 };
 
 export type DashboardData = {
+  viewerProfile: Profile;
+  profiles: Profile[];
   businesses: Business[];
   faqs: BusinessFaq[];
   customers: Customer[];
@@ -131,19 +141,27 @@ export type DashboardData = {
 };
 
 export async function getDashboardData(supabase: SupabaseClient, ownerId: string): Promise<DashboardData> {
-  const { data: businessRows, error: businessesError } = await supabase
+  const viewerProfile = await getProfile(supabase, ownerId);
+  const isPlatformAdmin = viewerProfile.role === "platform_admin";
+  const businessQuery = supabase
     .from("businesses")
     .select("*")
-    .eq("owner_id", ownerId)
     .order("created_at", { ascending: true });
+
+  if (!isPlatformAdmin) businessQuery.eq("owner_id", ownerId);
+
+  const { data: businessRows, error: businessesError } = await businessQuery;
 
   if (businessesError) throw businessesError;
 
   const businesses = (businessRows ?? []).map(mapBusiness);
   const businessIds = businesses.map((business) => business.id);
+  const profiles = isPlatformAdmin ? await getProfiles(supabase) : [viewerProfile];
 
   if (businessIds.length === 0) {
     return {
+      viewerProfile,
+      profiles,
       businesses,
       faqs: [],
       customers: [],
@@ -209,6 +227,8 @@ export async function getDashboardData(supabase: SupabaseClient, ownerId: string
   if (messagesResult.error) throw messagesResult.error;
 
   return {
+    viewerProfile,
+    profiles,
     businesses,
     faqs: ((faqsResult.data ?? []) as FaqRow[]).map(mapFaq),
     customers: ((customersResult.data ?? []) as CustomerRow[]).map(mapCustomer),
@@ -220,6 +240,27 @@ export async function getDashboardData(supabase: SupabaseClient, ownerId: string
     availabilitySlots: ((availabilitySlotsResult.data ?? []) as AvailabilitySlotRow[]).map(mapAvailabilitySlot),
     businessLinks: ((businessLinksResult.data ?? []) as BusinessLinkRow[]).map(mapBusinessLink),
   };
+}
+
+export async function getProfile(supabase: SupabaseClient, profileId: string): Promise<Profile> {
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("id, email, full_name, role")
+    .eq("id", profileId)
+    .single();
+
+  if (error || !data) throw error ?? new Error("Perfil no encontrado.");
+  return mapProfile(data as ProfileRow);
+}
+
+async function getProfiles(supabase: SupabaseClient): Promise<Profile[]> {
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("id, email, full_name, role")
+    .order("created_at", { ascending: true });
+
+  if (error) throw error;
+  return ((data ?? []) as ProfileRow[]).map(mapProfile);
 }
 
 export async function getPublicBusiness(supabase: SupabaseClient, slug: string) {
@@ -357,6 +398,15 @@ function mapQuote(row: QuoteRow): Quote {
     maxPrice: row.max_price,
     notes: row.notes,
     status: row.status,
+  };
+}
+
+function mapProfile(row: ProfileRow): Profile {
+  return {
+    id: row.id,
+    email: row.email ?? undefined,
+    fullName: row.full_name ?? undefined,
+    role: row.role,
   };
 }
 

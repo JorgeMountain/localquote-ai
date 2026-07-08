@@ -28,7 +28,7 @@ export default async function QuotesPage({ searchParams }: QuotesPageProps) {
   const quotes = data.quotes.filter((quote) => !activeBusinessId || quote.businessId === activeBusinessId);
 
   return (
-    <AppShell>
+    <AppShell viewerProfile={data.viewerProfile}>
       <header className="mb-6 border-b border-black/10 pb-6">
         <h1 className="text-4xl font-semibold tracking-normal">Cotizaciones</h1>
         <p className="mt-2 text-[#706d62]">Pipeline editable para enviar, aceptar o revisar estimados.</p>

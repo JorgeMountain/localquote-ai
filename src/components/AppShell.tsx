@@ -7,7 +7,9 @@ import {
   Inbox,
   LayoutDashboard,
   MessageCircle,
+  ShieldCheck,
 } from "lucide-react";
+import type { Profile } from "@/lib/types";
 
 const navItems = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
@@ -17,7 +19,12 @@ const navItems = [
   { href: "/quotes", label: "Cotizaciones", icon: FileText },
 ];
 
-export function AppShell({ children }: { children: React.ReactNode }) {
+export function AppShell({ children, viewerProfile }: { children: React.ReactNode; viewerProfile?: Profile }) {
+  const visibleNavItems =
+    viewerProfile?.role === "platform_admin"
+      ? [...navItems, { href: "/admin", label: "Admin", icon: ShieldCheck }]
+      : navItems;
+
   return (
     <div className="min-h-screen bg-[var(--background)] text-[var(--foreground)]">
       <aside className="fixed inset-y-0 left-0 hidden w-72 border-r border-black/10 bg-[#f8f6f1] px-5 py-6 lg:block">
@@ -34,7 +41,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </Link>
 
         <nav className="mt-10 space-y-1">
-          {navItems.map((item) => (
+          {visibleNavItems.map((item) => (
             <Link
               key={item.href}
               href={item.href}
@@ -54,6 +61,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <p className="mt-3 text-sm leading-6 text-[#6f6b61]">
             Configura negocio, precios, horarios, reglas y FAQs antes de probar WhatsApp.
           </p>
+          {viewerProfile && (
+            <p className="mt-3 rounded-md bg-[#f1eee6] px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-[#4f4b42]">
+              {viewerProfile.role === "platform_admin" ? "Admin plataforma" : "Perfil negocio"}
+            </p>
+          )}
         </div>
       </aside>
 

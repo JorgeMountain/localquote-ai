@@ -16,12 +16,14 @@ export default async function BusinessesPage() {
   const data = await getDashboardData(supabase, user.id);
 
   return (
-    <AppShell>
+    <AppShell viewerProfile={data.viewerProfile}>
       <Header title="Configurar bot" subtitle="Crea negocios reales y define que debe saber, decir y evitar el asistente." />
       {data.businesses.length === 0 && <OnboardingPanel userEmail={user.email} />}
       <div className="mt-6">
         <BusinessWorkspace
           businesses={data.businesses}
+          profiles={data.profiles}
+          viewerProfile={data.viewerProfile}
           faqs={data.faqs}
           businessHours={data.businessHours}
           availabilitySlots={data.availabilitySlots}
