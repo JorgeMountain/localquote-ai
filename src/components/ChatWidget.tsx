@@ -11,20 +11,17 @@ type UiMessage = {
 };
 
 export function ChatWidget({ business }: { business: Business }) {
-  const [customerName, setCustomerName] = useState("");
-  const [customerPhone, setCustomerPhone] = useState("");
   const [message, setMessage] = useState("");
   const [conversationId, setConversationId] = useState<string>();
   const [customerId, setCustomerId] = useState<string>();
   const [messages, setMessages] = useState<UiMessage[]>([
     {
       role: "assistant",
-      body: `Hola, soy el asistente de ${business.name}. Dejame tu nombre, telefono y pregunta para ayudarte.`,
+      body: `Hola, soy el asistente de ${business.name}. ¿En que puedo ayudarte?`,
     },
   ]);
   const [isSending, setIsSending] = useState(false);
   const [lastResponse, setLastResponse] = useState<ChatResponse | null>(null);
-  const [formError, setFormError] = useState("");
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -32,17 +29,8 @@ export function ChatWidget({ business }: { business: Business }) {
     const customerMessage = message.trim();
     if (!customerMessage) return;
 
-    const inferredName = customerName.trim() || inferCustomerName(customerMessage);
-    const inferredPhone = customerPhone.trim() || inferCustomerPhone(customerMessage);
-
-    if (!inferredName || !inferredPhone) {
-      setFormError("Completa nombre y telefono arriba, o incluyelos en el mensaje.");
-      return;
-    }
-
-    setFormError("");
-    setCustomerName(inferredName);
-    setCustomerPhone(inferredPhone);
+    const inferredName = inferCustomerName(customerMessage);
+    const inferredPhone = inferCustomerPhone(customerMessage);
     setMessages((current) => [...current, { role: "customer", body: customerMessage }]);
     setMessage("");
     setIsSending(true);
@@ -120,29 +108,8 @@ export function ChatWidget({ business }: { business: Business }) {
           <div className="border-b border-black/10 p-4">
             <p className="text-sm font-semibold">Chat web tipo WhatsApp</p>
             <p className="text-xs text-[#706d62]">
-              Las respuestas no inventan datos; si falta informacion, escalan a confirmacion.
+              Prueba la conversacion como llegaria por WhatsApp: el cliente escribe directo.
             </p>
-          </div>
-
-          <div className="grid gap-3 border-b border-black/10 p-4 sm:grid-cols-2">
-            <input
-              className="h-11 rounded-md border border-black/15 bg-white px-3 text-sm outline-none focus:border-black"
-              placeholder="Nombre del cliente"
-              value={customerName}
-              onChange={(event) => {
-                setCustomerName(event.target.value);
-                setFormError("");
-              }}
-            />
-            <input
-              className="h-11 rounded-md border border-black/15 bg-white px-3 text-sm outline-none focus:border-black"
-              placeholder="Telefono o WhatsApp"
-              value={customerPhone}
-              onChange={(event) => {
-                setCustomerPhone(event.target.value);
-                setFormError("");
-              }}
-            />
           </div>
 
           <div className="h-[420px] space-y-3 overflow-y-auto p-4">
@@ -172,21 +139,12 @@ export function ChatWidget({ business }: { business: Business }) {
             </div>
           )}
 
-          {formError && (
-            <p className="mx-4 mb-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700" aria-live="polite">
-              {formError}
-            </p>
-          )}
-
           <form onSubmit={submit} className="flex gap-2 border-t border-black/10 p-4">
             <input
               className="h-12 flex-1 rounded-md border border-black/15 bg-white px-3 text-sm outline-none focus:border-black"
               placeholder="Escribe una pregunta, cita o cotizacion..."
               value={message}
-              onChange={(event) => {
-                setMessage(event.target.value);
-                setFormError("");
-              }}
+              onChange={(event) => setMessage(event.target.value)}
             />
             <button
               className="flex size-12 shrink-0 items-center justify-center rounded-md bg-black text-white transition hover:bg-[#2b2b2b] disabled:opacity-50"
@@ -204,7 +162,7 @@ export function ChatWidget({ business }: { business: Business }) {
 
 function inferCustomerName(message: string) {
   const match = message.match(/\b(?:mi nombre es|me llamo|soy)\s+([^,.;\d]+)/i);
-  return match?.[1]?.trim().split(/\s+/).slice(0, 4).join(" ") || "Cliente web";
+  return match?.[1]?.trim().split(/\s+/).slice(0, 4).join(" ");
 }
 
 function inferCustomerPhone(message: string) {

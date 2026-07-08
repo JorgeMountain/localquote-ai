@@ -13,11 +13,8 @@ export async function POST(request: Request) {
   const provider = new WebChatProvider();
   const input = await provider.receive(payload);
 
-  if (!input.slug || !input.customerName || !input.customerPhone || !input.message) {
-    return NextResponse.json(
-      { error: "slug, customerName, customerPhone and message are required" },
-      { status: 400 },
-    );
+  if (!input.slug || !input.message) {
+    return NextResponse.json({ error: "slug and message are required" }, { status: 400 });
   }
 
   const supabase = createAnonRouteClient();
@@ -34,6 +31,12 @@ export async function POST(request: Request) {
   ]);
   const customerId = input.customerId ?? crypto.randomUUID();
   const conversationId = input.conversationId ?? crypto.randomUUID();
+  const providedCustomerName = input.customerName?.trim();
+  const providedCustomerPhone = input.customerPhone?.trim();
+  const storedCustomerName = providedCustomerName || "Cliente web";
+  const storedCustomerPhone = providedCustomerPhone || `web-${customerId.slice(0, 8)}`;
+  const ownerCustomerName = providedCustomerName || "No informado";
+  const ownerCustomerPhone = providedCustomerPhone || "No informado";
   const history = (input.history ?? []).slice(-8).map((message) => ({
     id: crypto.randomUUID(),
     conversationId,
@@ -72,8 +75,8 @@ export async function POST(request: Request) {
     const { error } = await supabase.from("customers").insert({
       id: customerId,
       business_id: business.id,
-      name: input.customerName,
-      phone: input.customerPhone,
+      name: storedCustomerName,
+      phone: storedCustomerPhone,
       status: analysis.appointmentDraft ? "appointment" : analysis.quoteDraft ? "quoted" : "new",
     });
 
@@ -88,8 +91,8 @@ export async function POST(request: Request) {
     faqs: businessFaqs,
     links: businessLinks,
     history,
-    customerName: input.customerName,
-    customerPhone: input.customerPhone,
+    customerName: providedCustomerName,
+    customerPhone: providedCustomerPhone,
     userMessage: input.message,
   });
   const shouldAppendCommercialReply =
@@ -168,8 +171,8 @@ export async function POST(request: Request) {
     await notifyBusinessOwner({
       type: "quote",
       business,
-      customerName: input.customerName,
-      customerPhone: input.customerPhone,
+      customerName: ownerCustomerName,
+      customerPhone: ownerCustomerPhone,
       quote,
     });
   }
@@ -203,8 +206,8 @@ export async function POST(request: Request) {
     await notifyBusinessOwner({
       type: "appointment",
       business,
-      customerName: input.customerName,
-      customerPhone: input.customerPhone,
+      customerName: ownerCustomerName,
+      customerPhone: ownerCustomerPhone,
       appointment,
     });
   }

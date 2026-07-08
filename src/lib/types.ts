@@ -92,8 +92,8 @@ export type Quote = {
 
 export type ChatRequest = {
   slug: string;
-  customerName: string;
-  customerPhone: string;
+  customerName?: string;
+  customerPhone?: string;
   message: string;
   history?: Pick<Message, "role" | "body">[];
   conversationId?: string;
