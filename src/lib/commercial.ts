@@ -52,7 +52,11 @@ export function analyzeCommercialRequest(message: string, business: Business): C
 
   if (intent === "appointment") {
     const preferredDate = detectDate(normalized);
-    const preferredTime = detectTime(normalized);
+    const detectedTime = detectTime(normalized);
+    const preferredTime =
+      preferredDate && detectedTime && !isFutureAppointmentTime(preferredDate, detectedTime)
+        ? null
+        : detectedTime;
     const missingFields = [
       !service ? "servicio" : "",
       !preferredDate ? "fecha preferida" : "",
@@ -163,14 +167,20 @@ function detectService(normalized: string, services: string[]) {
 
 function detectDate(normalized: string) {
   const isoMatch = normalized.match(/\b20\d{2}-\d{2}-\d{2}\b/);
-  if (isoMatch) return isoMatch[0];
+  if (isoMatch) return isValidFutureDate(isoMatch[0]) ? isoMatch[0] : null;
 
   const slashMatch = normalized.match(/\b(\d{1,2})[/-](\d{1,2})(?:[/-](\d{2,4}))?\b/);
   if (slashMatch) {
     const day = slashMatch[1].padStart(2, "0");
     const month = slashMatch[2].padStart(2, "0");
-    const year = slashMatch[3] ? normalizeYear(slashMatch[3]) : String(new Date().getFullYear());
-    return `${year}-${month}-${day}`;
+    const explicitYear = slashMatch[3] ? normalizeYear(slashMatch[3]) : null;
+    let year = explicitYear ?? String(businessDateParts().year);
+    let value = `${year}-${month}-${day}`;
+    if (!explicitYear && isRealDate(value) && value < todayInBusinessTimeZone()) {
+      year = String(Number(year) + 1);
+      value = `${year}-${month}-${day}`;
+    }
+    return isValidFutureDate(value) ? value : null;
   }
 
   const textDateMatch = normalized.match(
@@ -204,14 +214,16 @@ function detectTime(normalized: string) {
   if (!match) return null;
 
   let hours = Number(match[1]);
-  const minutes = match[2] ?? "00";
+  const minuteNumber = Number(match[2] ?? "00");
   const meridiem = match[3]?.replace(/\./g, "");
 
+  if (minuteNumber > 59) return null;
+  if (meridiem && (hours < 1 || hours > 12)) return null;
   if (meridiem === "pm" && hours < 12) hours += 12;
   if (meridiem === "am" && hours === 12) hours = 0;
   if (hours > 23) return null;
 
-  return `${String(hours).padStart(2, "0")}:${minutes}`;
+  return `${String(hours).padStart(2, "0")}:${String(minuteNumber).padStart(2, "0")}`;
 }
 
 function estimatePriceRange(business: Business, service?: string): [number, number] {
@@ -274,18 +286,20 @@ function dateFromDayAndMonth(day: number, monthName: string) {
   const month = months[monthName];
   if (!month || day < 1 || day > 31) return null;
 
-  const today = new Date();
-  let year = today.getFullYear();
-  const candidate = new Date(year, month - 1, day);
-  const todayStart = new Date(year, today.getMonth(), today.getDate());
-  if (candidate < todayStart) year += 1;
+  let year = businessDateParts().year;
+  let value = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  if (!isRealDate(value)) return null;
+  if (value < todayInBusinessTimeZone()) {
+    year += 1;
+    value = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  }
 
-  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  return isRealDate(value) ? value : null;
 }
 
 function daysFromNow(days: number) {
-  const date = new Date();
-  date.setDate(date.getDate() + days);
+  const today = businessDateParts();
+  const date = new Date(Date.UTC(today.year, today.month - 1, today.day + days));
   return date.toISOString().slice(0, 10);
 }
 
@@ -294,7 +308,62 @@ function nextWeekdayOffset(normalized: string) {
   const target = weekdays.findIndex((weekday) => normalized.includes(weekday));
   if (target === -1) return null;
 
-  const today = new Date().getDay();
+  const todayParts = businessDateParts();
+  const today = new Date(Date.UTC(todayParts.year, todayParts.month - 1, todayParts.day)).getUTCDay();
   const offset = (target - today + 7) % 7;
   return offset === 0 ? 7 : offset;
+}
+
+function isValidFutureDate(value: string) {
+  return isRealDate(value) && value >= todayInBusinessTimeZone();
+}
+
+function isRealDate(value: string) {
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return false;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCFullYear() === year
+    && date.getUTCMonth() === month - 1
+    && date.getUTCDate() === day;
+}
+
+function todayInBusinessTimeZone() {
+  const parts = businessDateParts();
+  return `${parts.year}-${String(parts.month).padStart(2, "0")}-${String(parts.day).padStart(2, "0")}`;
+}
+
+function businessDateParts() {
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone: process.env.BUSINESS_TIME_ZONE ?? "America/Bogota",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+  const parts = formatter.formatToParts(new Date());
+  return {
+    year: Number(parts.find((part) => part.type === "year")?.value),
+    month: Number(parts.find((part) => part.type === "month")?.value),
+    day: Number(parts.find((part) => part.type === "day")?.value),
+  };
+}
+
+function isFutureAppointmentTime(date: string, time: string) {
+  if (date > todayInBusinessTimeZone()) return true;
+  if (date < todayInBusinessTimeZone()) return false;
+
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone: process.env.BUSINESS_TIME_ZONE ?? "America/Bogota",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  });
+  const parts = formatter.formatToParts(new Date());
+  const currentHour = Number(parts.find((part) => part.type === "hour")?.value);
+  const currentMinute = Number(parts.find((part) => part.type === "minute")?.value);
+  const [appointmentHour, appointmentMinute] = time.split(":").map(Number);
+
+  return appointmentHour * 60 + appointmentMinute > currentHour * 60 + currentMinute;
 }

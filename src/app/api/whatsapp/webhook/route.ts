@@ -1,27 +1,27 @@
 import { NextResponse } from "next/server";
-import { generateAssistantReply } from "@/lib/ai";
-import { analyzeCommercialRequest, buildCommercialReply } from "@/lib/commercial";
-import { getPublicBusiness, getPublicFaqs, getPublicLinks, getPublicSchedule } from "@/lib/db";
-import { notifyBusinessOwner } from "@/lib/owner-notifications";
-import { buildAvailabilityReply, validateAppointmentAvailability } from "@/lib/schedule";
+import { processChatMessage } from "@/lib/chat-service";
+import {
+  claimWhatsAppEvent,
+  consumeInternalRateLimit,
+  finishWhatsAppEvent,
+  getInternalChatContext,
+} from "@/lib/chat-store";
 import { createAnonRouteClient } from "@/lib/supabase/route";
+import { hasWhatsAppWebhookSecret, verifyMetaWebhookSignature } from "@/lib/webhook-security";
 import { sendWhatsAppText } from "@/lib/whatsapp";
-import type { Message } from "@/lib/types";
+
+export const runtime = "nodejs";
 
 type WhatsAppTextMessage = {
   from: string;
   id: string;
   timestamp: string;
-  text?: {
-    body?: string;
-  };
+  text?: { body?: string };
   type: string;
 };
 
 type WhatsAppContact = {
-  profile?: {
-    name?: string;
-  };
+  profile?: { name?: string };
   wa_id: string;
 };
 
@@ -31,12 +31,13 @@ type WhatsAppWebhookPayload = {
       value?: {
         contacts?: WhatsAppContact[];
         messages?: WhatsAppTextMessage[];
+        metadata?: {
+          phone_number_id?: string;
+        };
       };
     }[];
   }[];
 };
-
-const sessions = new Map<string, { conversationId: string; customerId: string; history: Pick<Message, "role" | "body">[] }>();
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
@@ -52,237 +53,114 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const payload = (await request.json()) as WhatsAppWebhookPayload;
+  const rawBody = await request.text();
+  if (Buffer.byteLength(rawBody, "utf8") > 256 * 1024) {
+    return NextResponse.json({ error: "Payload too large" }, { status: 413 });
+  }
+  if (process.env.NODE_ENV === "production" && !hasWhatsAppWebhookSecret()) {
+    return NextResponse.json({ error: "WHATSAPP_APP_SECRET is required" }, { status: 503 });
+  }
+  if (!verifyMetaWebhookSignature(rawBody, request.headers.get("x-hub-signature-256"))) {
+    return NextResponse.json({ error: "Invalid webhook signature" }, { status: 401 });
+  }
+
+  let payload: WhatsAppWebhookPayload;
+  try {
+    payload = JSON.parse(rawBody) as WhatsAppWebhookPayload;
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+  }
+
   const incoming = getIncomingMessage(payload);
+  if (!incoming) return NextResponse.json({ ok: true });
 
-  if (!incoming) {
-    return NextResponse.json({ ok: true });
-  }
-
-  const { contact, message } = incoming;
-  const text = message.text?.body?.trim();
-
-  if (!text || message.type !== "text") {
-    await sendWhatsAppText(message.from, "Por ahora solo puedo responder mensajes de texto.");
-    return NextResponse.json({ ok: true });
-  }
-
+  const { contact, message, phoneNumberId } = incoming;
   const supabase = createAnonRouteClient();
-  const business = await getPublicBusiness(supabase, process.env.WHATSAPP_DEFAULT_BUSINESS_SLUG ?? "sonrisa-clara");
+  let claimed = false;
 
-  if (!business) {
-    await sendWhatsAppText(message.from, "No pude encontrar el negocio configurado para este WhatsApp.");
-    return NextResponse.json({ ok: false, error: "Business not found" }, { status: 500 });
-  }
-
-  const [businessFaqs, businessLinks, schedule] = await Promise.all([
-    getPublicFaqs(supabase, business.id),
-    getPublicLinks(supabase, business.id),
-    getPublicSchedule(supabase, business.id),
-  ]);
-  const session = sessions.get(message.from);
-  const customerId = session?.customerId ?? crypto.randomUUID();
-  const conversationId = session?.conversationId ?? crypto.randomUUID();
-  const customerName = contact.profile?.name ?? `WhatsApp ${message.from}`;
-  const history = (session?.history ?? []).slice(-8).map((item) => ({
-    id: crypto.randomUUID(),
-    conversationId,
-    role: item.role,
-    body: item.body,
-    createdAt: new Date().toISOString(),
-  }));
-  const commercialContext = [...history.filter((item) => item.role === "customer").map((item) => item.body), text]
-    .slice(-6)
-    .join("\n");
-  const analysis = analyzeCommercialRequest(commercialContext, business);
-  const shouldUseFaqAnswer = analysis.intent === "faq" && hasRelevantFaq(text, businessFaqs);
-  const hasExistingAppointment = history.some(
-    (item) =>
-      item.role === "assistant" &&
-      item.body.toLowerCase().includes("solicitud de cita") &&
-      /registrad[ao]/i.test(item.body),
-  );
-  const hasExistingQuote = history.some(
-    (item) => item.role === "assistant" && item.body.toLowerCase().includes("cotizacion estimada"),
-  );
-  const appointmentAvailability =
-    analysis.appointmentDraft && !hasExistingAppointment
-      ? validateAppointmentAvailability({
-          appointment: {
-            businessId: business.id,
-            preferredDate: analysis.appointmentDraft.preferredDate,
-            preferredTime: analysis.appointmentDraft.preferredTime,
-          },
-          ...schedule,
-        })
-      : undefined;
-
-  if (!session) {
-    const { error: customerError } = await supabase.from("customers").insert({
-      id: customerId,
-      business_id: business.id,
-      name: customerName,
-      phone: contact.wa_id || message.from,
-      status: analysis.appointmentDraft ? "appointment" : analysis.quoteDraft ? "quoted" : "new",
+  try {
+    const context = await getInternalChatContext(supabase, {
+      phoneNumberId,
+      slug: process.env.WHATSAPP_DEFAULT_BUSINESS_SLUG,
     });
 
-    if (customerError) throw customerError;
+    if (!context) {
+      console.error("WhatsApp webhook business not found.", { phoneNumberId });
+      return NextResponse.json({ ok: false, error: "Business not found" }, { status: 500 });
+    }
 
-    const { error: conversationError } = await supabase.from("conversations").insert({
-      id: conversationId,
-      business_id: business.id,
-      customer_id: customerId,
+    const allowed = await consumeInternalRateLimit(
+      supabase,
+      `whatsapp:${context.business.id}:${message.from.slice(0, 32)}`,
+      30,
+      60,
+    );
+    if (!allowed) return NextResponse.json({ ok: true, rateLimited: true });
+
+    claimed = await claimWhatsAppEvent(supabase, message.id, context.business.id);
+    if (!claimed) return NextResponse.json({ ok: true, duplicate: true });
+
+    const text = message.text?.body?.trim();
+    if (!text || message.type !== "text") {
+      await sendWhatsAppText(
+        message.from,
+        "Por ahora solo puedo responder mensajes de texto.",
+        context.business.whatsappPhoneNumberId ?? phoneNumberId,
+      );
+      await finishWhatsAppEvent(supabase, message.id, true);
+      return NextResponse.json({ ok: true });
+    }
+    if (text.length > 2000) {
+      await sendWhatsAppText(
+        message.from,
+        "El mensaje es demasiado largo. Envíalo nuevamente en menos de 2000 caracteres.",
+        context.business.whatsappPhoneNumberId ?? phoneNumberId,
+      );
+      await finishWhatsAppEvent(supabase, message.id, true);
+      return NextResponse.json({ ok: true });
+    }
+
+    const response = await processChatMessage({
       channel: "whatsapp",
-      last_intent: shouldUseFaqAnswer ? "faq" : analysis.intent,
+      phoneNumberId,
+      slug: process.env.WHATSAPP_DEFAULT_BUSINESS_SLUG,
+      customerName: contact?.profile?.name,
+      customerPhone: contact?.wa_id || message.from,
+      message: text,
     });
 
-    if (conversationError) throw conversationError;
+    if (!response) throw new Error("Business not found");
+
+    await sendWhatsAppText(
+      message.from,
+      response.reply,
+      response.responsePhoneNumberId ?? phoneNumberId,
+    );
+    await finishWhatsAppEvent(supabase, message.id, true);
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    if (claimed) {
+      try {
+        await finishWhatsAppEvent(supabase, message.id, false);
+      } catch (finishError) {
+        console.error("Failed to mark WhatsApp event as failed.", finishError);
+      }
+    }
+    console.error("WhatsApp webhook processing failed.", error);
+    const errorMessage = error instanceof Error ? error.message : "Webhook processing failed";
+    return NextResponse.json({ ok: false, error: errorMessage }, { status: 500 });
   }
-
-  const ai = await generateAssistantReply({
-    business,
-    faqs: businessFaqs,
-    links: businessLinks,
-    history,
-    customerName,
-    customerPhone: contact.wa_id || message.from,
-    userMessage: text,
-  });
-  const shouldAppendCommercialReply =
-    !(hasExistingAppointment && analysis.appointmentDraft) && !(hasExistingQuote && analysis.quoteDraft);
-  const reply = shouldUseFaqAnswer
-    ? ai.reply
-    : appointmentAvailability && !appointmentAvailability.canCreateRequest
-      ? `${ai.reply} ${buildAvailabilityReply(appointmentAvailability)}`
-    : shouldAppendCommercialReply
-      ? buildCommercialReply(ai.reply, analysis)
-      + (appointmentAvailability?.message ? ` ${appointmentAvailability.message}` : "")
-      : ai.reply;
-
-  const { error: messagesError } = await supabase.from("messages").insert([
-    {
-      id: crypto.randomUUID(),
-      conversation_id: conversationId,
-      role: "customer",
-      body: text,
-    },
-    {
-      id: crypto.randomUUID(),
-      conversation_id: conversationId,
-      role: "assistant",
-      body: reply,
-    },
-  ]);
-
-  if (messagesError) throw messagesError;
-
-  if (analysis.quoteDraft && !hasExistingQuote) {
-    const quote = {
-      id: crypto.randomUUID(),
-      businessId: business.id,
-      customerId,
-      service: analysis.quoteDraft.service,
-      description: analysis.quoteDraft.description,
-      minPrice: analysis.quoteDraft.minPrice,
-      maxPrice: analysis.quoteDraft.maxPrice,
-      notes: analysis.quoteDraft.notes,
-      status: "draft" as const,
-    };
-    const { error } = await supabase.from("quotes").insert({
-      id: quote.id,
-      business_id: quote.businessId,
-      customer_id: quote.customerId,
-      service: quote.service,
-      description: quote.description,
-      min_price: quote.minPrice,
-      max_price: quote.maxPrice,
-      notes: quote.notes,
-      status: quote.status,
-    });
-
-    if (error) throw error;
-
-    await notifyBusinessOwner({
-      type: "quote",
-      business,
-      customerName,
-      customerPhone: contact.wa_id || message.from,
-      quote,
-    });
-  }
-
-  if (analysis.appointmentDraft && !hasExistingAppointment && (!appointmentAvailability || appointmentAvailability.canCreateRequest)) {
-    const appointment = {
-      id: crypto.randomUUID(),
-      businessId: business.id,
-      customerId,
-      service: analysis.appointmentDraft.service,
-      preferredDate: analysis.appointmentDraft.preferredDate,
-      preferredTime: analysis.appointmentDraft.preferredTime,
-      status: "pending" as const,
-    };
-    const { error } = await supabase.from("appointment_requests").insert({
-      id: appointment.id,
-      business_id: appointment.businessId,
-      customer_id: appointment.customerId,
-      service: appointment.service,
-      preferred_date: appointment.preferredDate,
-      preferred_time: appointment.preferredTime,
-      status: appointment.status,
-    });
-
-    if (error) throw error;
-
-    await notifyBusinessOwner({
-      type: "appointment",
-      business,
-      customerName,
-      customerPhone: contact.wa_id || message.from,
-      appointment,
-    });
-  }
-
-  await sendWhatsAppText(message.from, reply);
-  const fullHistory: Pick<Message, "role" | "body">[] = [
-    ...(session?.history ?? []),
-    { role: "customer", body: text },
-    { role: "assistant", body: reply },
-  ];
-  const nextHistory = fullHistory.slice(-8);
-  sessions.set(message.from, {
-    conversationId,
-    customerId,
-    history: nextHistory,
-  });
-
-  return NextResponse.json({ ok: true });
 }
 
-function getIncomingMessage(payload: WhatsAppWebhookPayload) {
-  for (const entry of payload.entry ?? []) {
+function getIncomingMessage(payload: WhatsAppWebhookPayload | null) {
+  for (const entry of payload?.entry ?? []) {
     for (const change of entry.changes ?? []) {
       const message = change.value?.messages?.[0];
       const contact = change.value?.contacts?.[0];
-      if (message && contact) return { contact, message };
+      const phoneNumberId = change.value?.metadata?.phone_number_id;
+      if (message) return { contact, message, phoneNumberId };
     }
   }
 
   return null;
-}
-
-function hasRelevantFaq(message: string, faqs: Awaited<ReturnType<typeof getPublicFaqs>>) {
-  const tokens = message
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .split(/\W+/)
-    .filter((token) => token.length > 3);
-
-  return faqs.some((faq) => {
-    const searchable = `${faq.question} ${faq.answer}`
-      .toLowerCase()
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "");
-    return tokens.some((token) => searchable.includes(token));
-  });
 }

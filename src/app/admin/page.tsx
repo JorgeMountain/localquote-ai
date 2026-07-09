@@ -1,6 +1,5 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { PasswordResetForm } from "@/components/ActionForms";
 import { AppShell } from "@/components/AppShell";
 import { MetricCard } from "@/components/MetricCard";
 import { getDashboardData } from "@/lib/db";
@@ -43,7 +42,7 @@ export default async function AdminPage() {
           <div>
             <h2 className="text-2xl font-semibold">Usuarios de la plataforma</h2>
             <p className="mt-1 text-sm text-[#706d62]">
-              Las contraseñas están cifradas por Supabase y no son visibles. Puedes enviar un enlace seguro para cambiarla.
+              Las contraseñas están cifradas por Supabase y no son visibles. Cada usuario puede restablecerla desde el acceso.
             </p>
           </div>
           <Link className="text-sm font-semibold underline underline-offset-4" href="/payments">
@@ -77,11 +76,9 @@ export default async function AdminPage() {
                         : "Sin negocio asignado"}
                     </td>
                     <td className="py-3">
-                      {profile.email ? (
-                        <PasswordResetForm email={profile.email} />
-                      ) : (
-                        <span className="text-[#706d62]">No disponible</span>
-                      )}
+                      <span className="text-[#706d62]">
+                        Protegida. El usuario la restablece desde la pantalla de acceso.
+                      </span>
                     </td>
                   </tr>
                 );

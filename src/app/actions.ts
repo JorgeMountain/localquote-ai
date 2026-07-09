@@ -1,7 +1,6 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { businesses, faqs } from "@/lib/seed";
 import { createClient } from "@/lib/supabase/server";
@@ -19,35 +18,6 @@ export type ActionState = {
   status: "success" | "error";
   message: string;
 } | null;
-
-export async function sendPasswordResetWithFeedback(
-  _state: ActionState,
-  formData: FormData,
-): Promise<ActionState> {
-  return withFeedback(() => sendPasswordResetCore(formData), "Enlace de cambio de contraseña enviado.");
-}
-
-async function sendPasswordResetCore(formData: FormData) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) redirect("/login");
-  const viewerProfile = await getViewerProfile(supabase, user.id);
-  if (viewerProfile.role !== "platform_admin") throw new Error("Acceso exclusivo del administrador.");
-
-  const email = String(formData.get("email") ?? "").trim().toLowerCase();
-  if (!email || !email.includes("@")) throw new Error("Correo inválido.");
-
-  const requestHeaders = await headers();
-  const origin = requestHeaders.get("origin") ?? process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
-  const { error } = await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: `${origin}/auth/callback?next=/update-password`,
-  });
-
-  if (error) throw error;
-}
 
 export async function updatePaymentReceiptStatusWithFeedback(
   _state: ActionState,
@@ -96,7 +66,6 @@ export async function seedDemoData() {
   } = await supabase.auth.getUser();
 
   if (!user) redirect("/login");
-  await ensureProfile(supabase, user.id, user.email);
 
   const { data: existing } = await supabase
     .from("businesses")
@@ -238,6 +207,7 @@ async function updateBusinessCore(formData: FormData) {
       location: String(formData.get("location") ?? ""),
       phone: String(formData.get("phone") ?? ""),
       rules,
+      whatsapp_phone_number_id: normalizeOptionalId(String(formData.get("whatsapp_phone_number_id") ?? "")),
     })
     .eq("id", id);
 
@@ -288,12 +258,12 @@ async function createBusinessCore(formData: FormData) {
   } = await supabase.auth.getUser();
 
   if (!user) redirect("/login");
-  await ensureProfile(supabase, user.id, user.email);
   const viewerProfile = await getViewerProfile(supabase, user.id);
 
   const name = String(formData.get("name") ?? "").trim();
   const type = parseBusinessType(String(formData.get("type") ?? "repair"));
   const slug = slugify(String(formData.get("slug") ?? "") || name);
+  if (!name || !slug) throw new Error("El negocio necesita un nombre valido.");
   const requestedOwnerId = String(formData.get("owner_id") ?? "").trim();
   const ownerId = viewerProfile.role === "platform_admin" && requestedOwnerId ? requestedOwnerId : user.id;
 
@@ -308,6 +278,7 @@ async function createBusinessCore(formData: FormData) {
     location: String(formData.get("location") ?? "").trim(),
     phone: String(formData.get("phone") ?? "").trim(),
     rules: splitLinesOrCommas(String(formData.get("rules") ?? "")),
+    whatsapp_phone_number_id: normalizeOptionalId(String(formData.get("whatsapp_phone_number_id") ?? "")),
   });
 
   if (error) throw error;
@@ -770,16 +741,6 @@ async function createDemoLead(
   }
 }
 
-async function ensureProfile(supabase: Awaited<ReturnType<typeof createClient>>, userId: string, email?: string) {
-  const { error } = await supabase.from("profiles").upsert({
-    id: userId,
-    email: email ?? null,
-    full_name: email ? email.split("@")[0] : "Owner",
-  });
-
-  if (error) throw error;
-}
-
 function splitLinesOrCommas(value: string) {
   return value
     .split(/\n|,/)
@@ -848,6 +809,14 @@ function normalizeHttpUrl(value: string) {
   } catch {
     throw new Error("Ingresa un enlace valido que empiece por http:// o https://.");
   }
+}
+
+function normalizeOptionalId(value: string) {
+  const trimmed = value.trim();
+  if (trimmed && !/^\d{5,32}$/.test(trimmed)) {
+    throw new Error("El WhatsApp Phone Number ID debe contener solo numeros.");
+  }
+  return trimmed || null;
 }
 
 async function getViewerProfile(supabase: Awaited<ReturnType<typeof createClient>>, userId: string) {

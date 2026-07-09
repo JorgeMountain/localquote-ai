@@ -1,19 +1,15 @@
 # Tactio
 
-MVP de una plataforma SaaS para negocios locales. El producto permite configurar negocios, cargar FAQs, capturar leads desde un chat publico, responder con IA basada en datos del negocio, generar solicitudes de cita y crear cotizaciones estimadas.
-
-La primera pantalla es el dashboard operativo, no una landing page.
+MVP SaaS para que negocios locales configuren un asistente comercial, atiendan conversaciones web y WhatsApp, capturen clientes, reciban solicitudes de cita y administren cotizaciones.
 
 ## Stack
 
-- Next.js App Router
-- TypeScript
-- Tailwind CSS v4
-- DeepSeek V4 Flash u OpenAI opcional para respuestas IA
-- Supabase real para base de datos y autenticacion
-- Adaptador `MessagingProvider` preparado para WhatsApp, con proveedor web activo en el MVP
+- Next.js 16 App Router, React 19 y TypeScript
+- Supabase Auth, PostgreSQL, RLS y Storage
+- DeepSeek u OpenAI mediante API compatible
+- WhatsApp Business Cloud API
 
-## Ejecutar localmente
+## Desarrollo local
 
 ```bash
 npm install
@@ -22,114 +18,81 @@ npm run dev
 
 Abrir `http://localhost:3000`.
 
-Rutas principales:
-
-- `/` dashboard privado protegido por Supabase Auth
-- `/businesses` configuracion de negocios y FAQs
-- `/conversations` conversaciones recientes
-- `/appointments` solicitudes de cita
-- `/quotes` cotizaciones
-- `/b/sonrisa-clara` chat publico odontologo
-- `/b/fixpro-tecnicos` chat publico tecnico
-
-## Variables de entorno
-
-Copia `.env.example` a `.env.local` si vas a conectar servicios reales.
-
 ```bash
-AI_PROVIDER=deepseek
-DEEPSEEK_API_KEY=
-DEEPSEEK_MODEL=deepseek-v4-flash
-DEEPSEEK_BASE_URL=https://api.deepseek.com
-
-OPENAI_API_KEY=
-OPENAI_MODEL=gpt-4o-mini
-NEXT_PUBLIC_SUPABASE_URL=
-NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=
+npm run lint
+npm test
+npm run build
 ```
 
-`AI_PROVIDER` puede ser `deepseek`, `openai` o `none`. Si no hay `DEEPSEEK_API_KEY` ni `OPENAI_API_KEY`, el chat usa un fallback determinista con FAQs, reglas e intencion detectada. Esto permite probar el MVP sin costo ni llaves.
+## Rutas
 
-El proyecto Supabase creado para este MVP es:
+- `/`: dashboard privado
+- `/admin`: usuarios y negocios, solo para el administrador de plataforma
+- `/businesses`: configuración del negocio, FAQs, enlaces y agenda opcional
+- `/conversations`: clientes e historial
+- `/appointments`: solicitudes de cita
+- `/quotes`: cotizaciones
+- `/payments`: comprobantes privados
+- `/b/[slug]`: chat web público
+- `/api/whatsapp/webhook`: webhook de Meta
 
-```text
-https://psyqztntvnrbdbyckgip.supabase.co
+## Configuración
+
+Copia `.env.example` a `.env.local`. Nunca guardes llaves reales en Git.
+
+Variables del servidor:
+
+- `DEEPSEEK_API_KEY` o `OPENAI_API_KEY`
+- `INTERNAL_API_TOKEN`: token aleatorio de al menos 24 caracteres
+- `WHATSAPP_VERIFY_TOKEN`: token usado para verificar el webhook; también funciona como respaldo local de `INTERNAL_API_TOKEN`
+- `WHATSAPP_APP_SECRET`: App Secret de Meta usado para validar `x-hub-signature-256`; obligatorio en producción
+- `WHATSAPP_ACCESS_TOKEN`: token de WhatsApp Cloud API
+- `WHATSAPP_PHONE_NUMBER_ID`: número emisor de respaldo
+- `WHATSAPP_DEFAULT_BUSINESS_SLUG`: negocio de respaldo para la configuración antigua de un solo número
+- `BUSINESS_TIME_ZONE`: zona horaria usada por la agenda; por defecto `America/Bogota`
+
+Variables públicas:
+
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
+
+La publishable key de Supabase puede estar en el navegador. Las llaves de IA, Meta y cualquier service-role nunca deben usar el prefijo `NEXT_PUBLIC_`.
+
+## Supabase
+
+Las migraciones están en `supabase/migrations`. Incluyen:
+
+- aislamiento por propietario y rol de administrador
+- agenda opcional con horarios, bloqueos y prevención de doble reserva
+- almacenamiento privado de comprobantes
+- persistencia de conversaciones web y WhatsApp
+- rate limiting e idempotencia de webhooks
+- RPC internos protegidos por un token cuyo hash SHA-256 se guarda en `private.app_secrets`
+
+Después de elegir `INTERNAL_API_TOKEN`, registra únicamente su hash en Supabase:
+
+```sql
+insert into private.app_secrets (key, value_hash)
+values ('internal_api_token', '<sha256-en-hexadecimal>')
+on conflict (key)
+do update set value_hash = excluded.value_hash, updated_at = now();
 ```
 
-## Base de datos
+## Agenda
 
-La migracion esta en:
-
-```text
-supabase/migrations/001_initial_schema.sql
-```
-
-Tablas incluidas:
-
-- `profiles`
-- `businesses`
-- `business_faqs`
-- `customers`
-- `conversations`
-- `messages`
-- `appointment_requests`
-- `quotes`
-
-La migracion ya fue aplicada al proyecto Supabase real. El dashboard usa queries reales con RLS y el chat publico inserta leads desde la publishable key.
-
-`/businesses` permite crear negocios, editar la ficha del negocio seleccionado, crear FAQs, editar FAQs y eliminarlas. Las paginas de conversaciones, citas y cotizaciones permiten actualizar estados desde el dashboard.
-
-Al registrarte e iniciar sesion, si el dashboard no tiene datos, usa **Cargar demo** para crear:
-
-- Clinica Sonrisa Clara
-- FixPro Tecnicos
-- FAQs
-- Clientes
-- Conversaciones
-- Solicitudes de cita
-- Cotizaciones
-
-## IA
-
-La ruta `POST /api/chat` construye respuestas con:
-
-- Datos del negocio
-- Servicios
-- Horarios
-- Reglas
-- FAQs
-- Historial reciente
-
-Por defecto, el proveedor recomendado es DeepSeek V4 Flash mediante API compatible con OpenAI. La llave debe guardarse solo en `.env.local`:
-
-```bash
-AI_PROVIDER=deepseek
-DEEPSEEK_API_KEY=tu_llave_deepseek
-DEEPSEEK_MODEL=deepseek-v4-flash
-```
-
-Regla clave: si falta informacion, el asistente debe pedir confirmacion del negocio y no inventar datos.
-
-El flujo comercial solo crea una cita cuando detecta servicio, fecha y hora preferida. Solo crea una cotizacion cuando detecta servicio y descripcion suficiente del caso. Si faltan datos, guarda la conversacion y pide lo faltante.
+La agenda estructurada es opcional. Si un negocio configura horarios y bloqueos, Tactio valida apertura, intervalos ocupados y solicitudes activas. Si no configura agenda, la solicitud se guarda como `pending` para revisión manual. El bot no confirma citas automáticamente.
 
 ## WhatsApp
 
-La integracion real no esta construida. La interfaz queda aislada en:
+Cada negocio puede guardar su `WhatsApp Phone Number ID`. El webhook usa el `phone_number_id` recibido de Meta para seleccionar el negocio correcto y responder desde ese mismo número.
 
-```text
-src/lib/messaging.ts
-```
+Para producción:
 
-Para conectarlo despues:
+1. Configura la URL pública `/api/whatsapp/webhook` y `WHATSAPP_VERIFY_TOKEN` en Meta.
+2. Agrega `WHATSAPP_APP_SECRET` al entorno del servidor.
+3. Suscribe el campo `messages`.
+4. Guarda el Phone Number ID correspondiente en cada negocio.
 
-1. Implementar `WhatsAppProvider` con Twilio o WhatsApp Business API.
-2. Normalizar mensajes entrantes al tipo `ChatRequest`.
-3. Reutilizar la misma ruta/logica de negocio que usa el chat web.
-4. Persistir mensajes en Supabase en lugar del store en memoria.
+## IA
 
-## Validacion
-
-```bash
-npm run lint
-npm run build
-```
+`AI_PROVIDER` acepta `deepseek`, `openai` o `none`. Sin una llave válida, el sistema usa respuestas deterministas basadas en la configuración del negocio. El historial se lee desde Supabase; el navegador no puede inyectar historial ni escribir directamente en las tablas privadas del chat.

@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, KeyRound, Send, Save } from "lucide-react";
+import { Check, Send, Save } from "lucide-react";
 import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
 import {
@@ -8,7 +8,6 @@ import {
   updateCustomerStatusWithFeedback,
   updatePaymentReceiptStatusWithFeedback,
   updateQuoteStatusWithFeedback,
-  sendPasswordResetWithFeedback,
   type ActionState,
 } from "@/app/actions";
 import type { AppointmentStatus, LeadStatus, PaymentReceiptStatus, QuoteStatus } from "@/lib/types";
@@ -102,21 +101,6 @@ export function PaymentReceiptStatusForm({
         placeholder="Nota de revisión opcional"
       />
       <SubmitButton label="Guardar revisión" />
-      <ActionMessage state={state} compact />
-    </form>
-  );
-}
-
-export function PasswordResetForm({ email }: { email: string }) {
-  const [state, formAction] = useActionState(sendPasswordResetWithFeedback, null);
-
-  return (
-    <form action={formAction} className="grid gap-2">
-      <input type="hidden" name="email" value={email} />
-      <button className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-black/15 bg-white px-3 text-sm font-semibold">
-        <KeyRound size={15} />
-        Enviar restablecimiento
-      </button>
       <ActionMessage state={state} compact />
     </form>
   );

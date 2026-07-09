@@ -24,7 +24,7 @@ export async function notifyBusinessOwner(input: OwnerNotificationInput) {
   if (!recipient) return;
 
   try {
-    await sendWhatsAppText(recipient, buildOwnerMessage(input));
+    await sendWhatsAppText(recipient, buildOwnerMessage(input), input.business.whatsappPhoneNumberId);
   } catch (error) {
     console.warn("Owner WhatsApp notification failed", error);
   }

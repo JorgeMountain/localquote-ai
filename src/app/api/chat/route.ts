@@ -1,242 +1,91 @@
 import { NextResponse } from "next/server";
-import { generateAssistantReply } from "@/lib/ai";
-import { analyzeCommercialRequest, buildCommercialReply } from "@/lib/commercial";
-import { getPublicBusiness, getPublicFaqs, getPublicLinks, getPublicSchedule } from "@/lib/db";
-import { WebChatProvider } from "@/lib/messaging";
-import { notifyBusinessOwner } from "@/lib/owner-notifications";
-import { buildAvailabilityReply, validateAppointmentAvailability } from "@/lib/schedule";
+import { processChatMessage } from "@/lib/chat-service";
+import { consumeInternalRateLimit } from "@/lib/chat-store";
 import { createAnonRouteClient } from "@/lib/supabase/route";
 import type { ChatRequest } from "@/lib/types";
 
-export async function POST(request: Request) {
-  const payload = (await request.json()) as ChatRequest;
-  const provider = new WebChatProvider();
-  const input = await provider.receive(payload);
+const maxRequestBytes = 32 * 1024;
+const maxMessageLength = 2000;
 
-  if (!input.slug || !input.message) {
+export async function POST(request: Request) {
+  const contentLength = Number(request.headers.get("content-length") ?? "0");
+  if (contentLength > maxRequestBytes) {
+    return NextResponse.json({ error: "La solicitud es demasiado grande." }, { status: 413 });
+  }
+
+  const rawBody = await request.text();
+  if (Buffer.byteLength(rawBody, "utf8") > maxRequestBytes) {
+    return NextResponse.json({ error: "La solicitud es demasiado grande." }, { status: 413 });
+  }
+
+  let payload: ChatRequest;
+  try {
+    payload = JSON.parse(rawBody) as ChatRequest;
+  } catch {
+    return NextResponse.json({ error: "JSON invalido." }, { status: 400 });
+  }
+
+  const slug = payload.slug?.trim();
+  const message = payload.message?.trim();
+  if (!slug || !message) {
     return NextResponse.json({ error: "slug and message are required" }, { status: 400 });
   }
-
-  const supabase = createAnonRouteClient();
-  const business = await getPublicBusiness(supabase, input.slug);
-
-  if (!business) {
-    return NextResponse.json({ error: "Business not found" }, { status: 404 });
+  if (slug.length > 64) {
+    return NextResponse.json({ error: "Slug invalido." }, { status: 400 });
+  }
+  if (message.length > maxMessageLength) {
+    return NextResponse.json({ error: "El mensaje no puede superar 2000 caracteres." }, { status: 400 });
+  }
+  if (
+    (payload.customerId && !isUuid(payload.customerId))
+    || (payload.conversationId && !isUuid(payload.conversationId))
+  ) {
+    return NextResponse.json({ error: "Sesion de chat invalida." }, { status: 400 });
   }
 
-  const [businessFaqs, businessLinks, schedule] = await Promise.all([
-    getPublicFaqs(supabase, business.id),
-    getPublicLinks(supabase, business.id),
-    getPublicSchedule(supabase, business.id),
-  ]);
-  const customerId = input.customerId ?? crypto.randomUUID();
-  const conversationId = input.conversationId ?? crypto.randomUUID();
-  const providedCustomerName = input.customerName?.trim();
-  const providedCustomerPhone = input.customerPhone?.trim();
-  const storedCustomerName = providedCustomerName || "Cliente web";
-  const storedCustomerPhone = providedCustomerPhone || `web-${customerId.slice(0, 8)}`;
-  const ownerCustomerName = providedCustomerName || "No informado";
-  const ownerCustomerPhone = providedCustomerPhone || "No informado";
-  const history = (input.history ?? []).slice(-8).map((message) => ({
-    id: crypto.randomUUID(),
-    conversationId,
-    role: message.role,
-    body: message.body,
-    createdAt: new Date().toISOString(),
-  }));
-  const commercialContext = [...history.filter((message) => message.role === "customer").map((message) => message.body), input.message]
-    .slice(-6)
-    .join("\n");
-  const analysis = analyzeCommercialRequest(commercialContext, business);
-  const shouldUseFaqAnswer = analysis.intent === "faq" && hasRelevantFaq(input.message, businessFaqs);
-  const effectiveIntent = shouldUseFaqAnswer ? "faq" : analysis.intent;
-  const hasExistingAppointment = history.some(
-    (message) =>
-      message.role === "assistant" &&
-      message.body.toLowerCase().includes("solicitud de cita") &&
-      /registrad[ao]/i.test(message.body),
-  );
-  const hasExistingQuote = history.some(
-    (message) => message.role === "assistant" && message.body.toLowerCase().includes("cotizacion estimada"),
-  );
-  const appointmentAvailability =
-    analysis.appointmentDraft && !hasExistingAppointment
-      ? validateAppointmentAvailability({
-          appointment: {
-            businessId: business.id,
-            preferredDate: analysis.appointmentDraft.preferredDate,
-            preferredTime: analysis.appointmentDraft.preferredTime,
-          },
-          ...schedule,
-        })
-      : undefined;
+  try {
+    const forwardedFor = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
+    const clientIp = forwardedFor || request.headers.get("x-real-ip") || "unknown";
+    const allowed = await consumeInternalRateLimit(
+      createAnonRouteClient(),
+      `web-chat:${clientIp.slice(0, 64)}:${slug}`,
+      20,
+      60,
+    );
 
-  if (!input.customerId) {
-    const { error } = await supabase.from("customers").insert({
-      id: customerId,
-      business_id: business.id,
-      name: storedCustomerName,
-      phone: storedCustomerPhone,
-      status: analysis.appointmentDraft ? "appointment" : analysis.quoteDraft ? "quoted" : "new",
-    });
-
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
+    if (!allowed) {
+      return NextResponse.json(
+        { error: "Has enviado demasiados mensajes. Espera un minuto e intenta nuevamente." },
+        { status: 429 },
+      );
     }
 
-  }
-
-  const ai = await generateAssistantReply({
-    business,
-    faqs: businessFaqs,
-    links: businessLinks,
-    history,
-    customerName: providedCustomerName,
-    customerPhone: providedCustomerPhone,
-    userMessage: input.message,
-  });
-  const shouldAppendCommercialReply =
-    !(hasExistingAppointment && analysis.appointmentDraft) && !(hasExistingQuote && analysis.quoteDraft);
-  const reply = shouldUseFaqAnswer
-    ? ai.reply
-    : appointmentAvailability && !appointmentAvailability.canCreateRequest
-      ? `${ai.reply} ${buildAvailabilityReply(appointmentAvailability)}`
-    : shouldAppendCommercialReply
-      ? buildCommercialReply(ai.reply, analysis)
-      + (appointmentAvailability?.message ? ` ${appointmentAvailability.message}` : "")
-      : ai.reply;
-
-  if (!input.conversationId) {
-    const { error } = await supabase.from("conversations").insert({
-      id: conversationId,
-      business_id: business.id,
-      customer_id: customerId,
+    const response = await processChatMessage({
       channel: "web",
-      last_intent: effectiveIntent,
+      slug,
+      customerName: payload.customerName,
+      customerPhone: payload.customerPhone,
+      message,
+      customerId: payload.customerId,
+      conversationId: payload.conversationId,
     });
 
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
+    if (!response) {
+      return NextResponse.json({ error: "Business not found" }, { status: 404 });
     }
 
+    return NextResponse.json(response);
+  } catch (error) {
+    const messageText = error instanceof Error ? error.message : "No se pudo procesar el mensaje.";
+    const status = messageText.includes("Invalid chat session") ? 403 : 500;
+    if (status === 500) console.error("Web chat processing failed.", error);
+    return NextResponse.json(
+      { error: status === 403 ? "La sesion de chat no es valida." : "No se pudo procesar el mensaje." },
+      { status },
+    );
   }
-
-  const { error: messagesError } = await supabase.from("messages").insert([
-    {
-      id: crypto.randomUUID(),
-      conversation_id: conversationId,
-      role: "customer",
-      body: input.message,
-    },
-    {
-      id: crypto.randomUUID(),
-      conversation_id: conversationId,
-      role: "assistant",
-      body: reply,
-    },
-  ]);
-
-  if (messagesError) {
-    return NextResponse.json({ error: messagesError.message }, { status: 500 });
-  }
-
-  const quote =
-    analysis.quoteDraft && !hasExistingQuote
-      ? {
-          id: crypto.randomUUID(),
-          businessId: business.id,
-          customerId,
-          ...analysis.quoteDraft,
-          status: "draft" as const,
-        }
-      : undefined;
-
-  if (quote) {
-    const { error } = await supabase.from("quotes").insert({
-      id: quote.id,
-      business_id: quote.businessId,
-      customer_id: quote.customerId,
-      service: quote.service,
-      description: quote.description,
-      min_price: quote.minPrice,
-      max_price: quote.maxPrice,
-      notes: quote.notes,
-      status: quote.status,
-    });
-
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
-    }
-
-    await notifyBusinessOwner({
-      type: "quote",
-      business,
-      customerName: ownerCustomerName,
-      customerPhone: ownerCustomerPhone,
-      quote,
-    });
-  }
-
-  const appointment =
-    analysis.appointmentDraft && !hasExistingAppointment && (!appointmentAvailability || appointmentAvailability.canCreateRequest)
-      ? {
-          id: crypto.randomUUID(),
-          businessId: business.id,
-          customerId,
-          ...analysis.appointmentDraft,
-          status: "pending" as const,
-        }
-      : undefined;
-
-  if (appointment) {
-    const { error } = await supabase.from("appointment_requests").insert({
-      id: appointment.id,
-      business_id: appointment.businessId,
-      customer_id: appointment.customerId,
-      service: appointment.service,
-      preferred_date: appointment.preferredDate,
-      preferred_time: appointment.preferredTime,
-      status: appointment.status,
-    });
-
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
-    }
-
-    await notifyBusinessOwner({
-      type: "appointment",
-      business,
-      customerName: ownerCustomerName,
-      customerPhone: ownerCustomerPhone,
-      appointment,
-    });
-  }
-
-  const response = await provider.send({
-    conversationId,
-    customerId,
-    reply,
-    intent: effectiveIntent,
-    quote,
-    appointment,
-  });
-
-  return NextResponse.json(response);
 }
 
-function hasRelevantFaq(message: string, faqs: Awaited<ReturnType<typeof getPublicFaqs>>) {
-  const tokens = message
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .split(/\W+/)
-    .filter((token) => token.length > 3);
-
-  return faqs.some((faq) => {
-    const searchable = `${faq.question} ${faq.answer}`
-      .toLowerCase()
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "");
-    return tokens.some((token) => searchable.includes(token));
-  });
+function isUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }

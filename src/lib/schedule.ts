@@ -23,7 +23,7 @@ export function validateAppointmentAvailability({
   const dayHours = businessHours.filter((hour) => hour.dayOfWeek === dayOfWeek);
   const daySlots = availabilitySlots.filter((slot) => slot.date === appointment.preferredDate);
 
-  const explicitSlot = daySlots.find((slot) => slot.startTime === preferredTime);
+  const explicitSlot = daySlots.find((slot) => isTimeInsideSlot(slot, preferredTime));
   if (explicitSlot?.status === "blocked" || explicitSlot?.status === "booked") {
     return {
       canCreateRequest: false,
@@ -118,7 +118,9 @@ function isInsideWorkingHours(time: string, dayHours: BusinessHour[]) {
 }
 
 function isSlotBlocked(daySlots: AvailabilitySlot[], time: string) {
-  return daySlots.some((slot) => slot.startTime === time && (slot.status === "blocked" || slot.status === "booked"));
+  return daySlots.some(
+    (slot) => isTimeInsideSlot(slot, time) && (slot.status === "blocked" || slot.status === "booked"),
+  );
 }
 
 function isAppointmentOccupied(appointments: AppointmentRequest[], date: string, time: string) {
@@ -133,6 +135,11 @@ function isAppointmentOccupied(appointments: AppointmentRequest[], date: string,
 function normalizeTime(value: string) {
   const [hours = "00", minutes = "00"] = value.split(":");
   return `${hours.padStart(2, "0")}:${minutes.padStart(2, "0")}`;
+}
+
+function isTimeInsideSlot(slot: AvailabilitySlot, time: string) {
+  const minutes = toMinutes(time);
+  return minutes >= toMinutes(slot.startTime) && minutes < toMinutes(slot.endTime);
 }
 
 function toMinutes(time: string) {

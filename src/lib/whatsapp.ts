@@ -1,5 +1,5 @@
-export async function sendWhatsAppText(to: string, body: string) {
-  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+export async function sendWhatsAppText(to: string, body: string, sourcePhoneNumberId?: string) {
+  const phoneNumberId = sourcePhoneNumberId || process.env.WHATSAPP_PHONE_NUMBER_ID;
   const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
   const normalizedTo = normalizeWhatsAppPhone(to);
 

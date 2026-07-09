@@ -42,6 +42,7 @@ export function UpdatePasswordForm() {
   return (
     <form onSubmit={submit} className="mt-6 grid gap-3">
       <input
+        autoComplete="new-password"
         className="h-11 rounded-md border border-black/15 px-3 text-sm"
         minLength={10}
         onChange={(event) => setPassword(event.target.value)}
@@ -51,6 +52,7 @@ export function UpdatePasswordForm() {
         value={password}
       />
       <input
+        autoComplete="new-password"
         className="h-11 rounded-md border border-black/15 px-3 text-sm"
         minLength={10}
         onChange={(event) => setConfirmation(event.target.value)}

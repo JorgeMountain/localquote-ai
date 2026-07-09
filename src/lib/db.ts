@@ -11,6 +11,7 @@ import type {
   Message,
   PaymentReceipt,
   Profile,
+  PublicBusiness,
   Quote,
 } from "./types";
 
@@ -33,6 +34,7 @@ type BusinessRow = {
   location: string;
   phone: string;
   rules: string[];
+  whatsapp_phone_number_id: string | null;
 };
 
 type FaqRow = {
@@ -99,13 +101,6 @@ type BusinessLinkRow = {
   purpose: BusinessLink["purpose"];
   notes: string;
   is_active: boolean;
-};
-
-type ScheduleAppointmentRow = {
-  business_id: string;
-  preferred_date: string;
-  preferred_time: string;
-  status: AppointmentRequest["status"];
 };
 
 type BusinessHourRow = {
@@ -290,55 +285,12 @@ async function getProfiles(supabase: SupabaseClient): Promise<Profile[]> {
 export async function getPublicBusiness(supabase: SupabaseClient, slug: string) {
   const { data, error } = await supabase
     .from("businesses")
-    .select("id, owner_id, name, slug, type, description, services, hours, location, phone, rules")
+    .select("id, name, slug, type, description, services, hours, location, phone")
     .eq("slug", slug)
     .single();
 
   if (error || !data) return null;
-  return mapBusiness(data as BusinessRow);
-}
-
-export async function getPublicFaqs(supabase: SupabaseClient, businessId: string) {
-  const { data, error } = await supabase
-    .from("business_faqs")
-    .select("id, business_id, question, answer, category")
-    .eq("business_id", businessId);
-
-  if (error) throw error;
-  return ((data ?? []) as FaqRow[]).map(mapFaq);
-}
-
-export async function getPublicLinks(supabase: SupabaseClient, businessId: string) {
-  const { data, error } = await supabase
-    .from("business_links")
-    .select("id, business_id, label, url, purpose, notes, is_active")
-    .eq("business_id", businessId)
-    .eq("is_active", true);
-
-  if (error) throw error;
-  return ((data ?? []) as BusinessLinkRow[]).map(mapBusinessLink);
-}
-
-export async function getPublicSchedule(supabase: SupabaseClient, businessId: string) {
-  const [businessHoursResult, availabilitySlotsResult, appointmentsResult] = await Promise.all([
-    supabase.from("business_hours").select("*").eq("business_id", businessId),
-    supabase.from("availability_slots").select("*").eq("business_id", businessId),
-    supabase
-      .from("appointment_requests")
-      .select("business_id, preferred_date, preferred_time, status")
-      .eq("business_id", businessId)
-      .in("status", ["pending", "confirmed"]),
-  ]);
-
-  for (const result of [businessHoursResult, availabilitySlotsResult, appointmentsResult]) {
-    if (result.error) throw result.error;
-  }
-
-  return {
-    businessHours: ((businessHoursResult.data ?? []) as BusinessHourRow[]).map(mapBusinessHour),
-    availabilitySlots: ((availabilitySlotsResult.data ?? []) as AvailabilitySlotRow[]).map(mapAvailabilitySlot),
-    appointmentRequests: ((appointmentsResult.data ?? []) as ScheduleAppointmentRow[]).map(mapScheduleAppointment),
-  };
+  return mapPublicBusiness(data as Omit<BusinessRow, "owner_id" | "rules" | "whatsapp_phone_number_id">);
 }
 
 function mapBusiness(row: BusinessRow): Business {
@@ -354,6 +306,23 @@ function mapBusiness(row: BusinessRow): Business {
     location: row.location,
     phone: row.phone,
     rules: row.rules,
+    whatsappPhoneNumberId: row.whatsapp_phone_number_id ?? undefined,
+  };
+}
+
+function mapPublicBusiness(
+  row: Omit<BusinessRow, "owner_id" | "rules" | "whatsapp_phone_number_id">,
+): PublicBusiness {
+  return {
+    id: row.id,
+    name: row.name,
+    slug: row.slug,
+    type: row.type,
+    description: row.description,
+    services: row.services,
+    hours: row.hours,
+    location: row.location,
+    phone: row.phone,
   };
 }
 
@@ -462,18 +431,6 @@ function mapPaymentReceipt(row: PaymentReceiptRow): PaymentReceipt {
     status: row.status,
     createdAt: row.created_at,
     reviewedAt: row.reviewed_at ?? undefined,
-  };
-}
-
-function mapScheduleAppointment(row: ScheduleAppointmentRow): AppointmentRequest {
-  return {
-    id: "",
-    businessId: row.business_id,
-    customerId: "",
-    service: "",
-    preferredDate: row.preferred_date,
-    preferredTime: row.preferred_time,
-    status: row.status,
   };
 }
 

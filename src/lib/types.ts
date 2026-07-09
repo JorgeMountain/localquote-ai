@@ -33,7 +33,10 @@ export type Business = {
   location: string;
   phone: string;
   rules: string[];
+  whatsappPhoneNumberId?: string;
 };
+
+export type PublicBusiness = Omit<Business, "ownerId" | "rules" | "whatsappPhoneNumberId">;
 
 export type BusinessFaq = {
   id: string;
@@ -106,7 +109,6 @@ export type ChatRequest = {
   customerName?: string;
   customerPhone?: string;
   message: string;
-  history?: Pick<Message, "role" | "body">[];
   conversationId?: string;
   customerId?: string;
 };

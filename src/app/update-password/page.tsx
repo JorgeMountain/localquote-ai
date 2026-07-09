@@ -1,6 +1,15 @@
+import { redirect } from "next/navigation";
 import { UpdatePasswordForm } from "@/components/UpdatePasswordForm";
+import { createClient } from "@/lib/supabase/server";
 
-export default function UpdatePasswordPage() {
+export default async function UpdatePasswordPage() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) redirect("/login");
+
   return (
     <main className="flex min-h-screen items-center justify-center bg-[#111111] p-4 text-white">
       <section className="w-full max-w-md rounded-md border border-white/10 bg-white p-6 text-[#171717]">

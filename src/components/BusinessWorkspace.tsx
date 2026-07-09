@@ -148,6 +148,12 @@ export function BusinessWorkspace({
                   <div className="mt-5 grid gap-4 md:grid-cols-2">
                     <Field name="name" label="Nombre visible" defaultValue={selectedBusiness.name} required />
                     <Field name="phone" label="Telefono o WhatsApp" defaultValue={selectedBusiness.phone} required />
+                    <Field
+                      name="whatsapp_phone_number_id"
+                      label="WhatsApp Phone Number ID"
+                      defaultValue={selectedBusiness.whatsappPhoneNumberId ?? ""}
+                      hint="Opcional. Permite conectar varios negocios y números de WhatsApp en la misma aplicación."
+                    />
                     <Field name="location" label="Direccion o zona de cobertura" defaultValue={selectedBusiness.location} required />
                     <Field name="hours" label="Horarios y disponibilidad" defaultValue={selectedBusiness.hours} textarea required />
                     <Field
@@ -240,7 +246,7 @@ export function BusinessWorkspace({
                       Abrir chat web de prueba
                     </Link>
                     <div className="rounded-lg border border-white/10 bg-white/5 p-4 text-sm leading-6 text-white/70">
-                      WhatsApp responde con el negocio cuyo slug coincida con `WHATSAPP_DEFAULT_BUSINESS_SLUG`.
+                      WhatsApp identifica el negocio por su Phone Number ID. El slug global se usa solo como respaldo.
                     </div>
                   </div>
                 </section>
@@ -494,7 +500,9 @@ function WhatsAppStatusCard({
   business: Business;
   whatsappBusinessSlug: string;
 }) {
-  const isConnected = Boolean(whatsappBusinessSlug) && whatsappBusinessSlug === business.slug;
+  const isConnected =
+    Boolean(business.whatsappPhoneNumberId)
+    || (Boolean(whatsappBusinessSlug) && whatsappBusinessSlug === business.slug);
 
   return (
     <section className="rounded-xl border border-black/10 bg-white p-5 shadow-sm">
@@ -509,12 +517,18 @@ function WhatsAppStatusCard({
             : "border-amber-200 bg-amber-50 text-amber-800"
         }`}
       >
-        {isConnected ? "Este negocio esta conectado al WhatsApp." : "Este negocio aun no es el activo de WhatsApp."}
+        {isConnected ? "Este negocio esta conectado a WhatsApp." : "Este negocio aun no tiene un número de WhatsApp asociado."}
       </div>
       <dl className="mt-4 grid gap-3 text-sm">
         <div>
           <dt className="font-semibold">Slug de este negocio</dt>
           <dd className="mt-1 rounded-md bg-[#f8f6f1] px-3 py-2 font-mono text-xs">{business.slug}</dd>
+        </div>
+        <div>
+          <dt className="font-semibold">Phone Number ID</dt>
+          <dd className="mt-1 rounded-md bg-[#f8f6f1] px-3 py-2 font-mono text-xs">
+            {business.whatsappPhoneNumberId || "sin configurar"}
+          </dd>
         </div>
         <div>
           <dt className="font-semibold">Slug activo en WhatsApp</dt>
@@ -525,7 +539,7 @@ function WhatsAppStatusCard({
       </dl>
       {!isConnected && (
         <p className="mt-3 text-sm leading-6 text-[#706d62]">
-          Cuando quieras probar este negocio por WhatsApp, actualizamos la variable de entorno a este slug.
+          Agrega el Phone Number ID de Meta. El slug global queda solo como respaldo para pruebas antiguas.
         </p>
       )}
     </section>
@@ -654,6 +668,11 @@ function CreateBusinessFields({
         <option value="dentist">Salud / odontologia</option>
       </select>
       <input className={inputClass("white")} name="phone" placeholder="Telefono/WhatsApp" required />
+      <input
+        className={inputClass("white")}
+        name="whatsapp_phone_number_id"
+        placeholder="WhatsApp Phone Number ID opcional"
+      />
       <input className={inputClass("white", "md:col-span-2")} name="location" placeholder="Direccion o zona de cobertura" required />
       <textarea
         className={textareaClass("md:col-span-2")}

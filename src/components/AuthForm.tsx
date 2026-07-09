@@ -45,6 +45,27 @@ export function AuthForm() {
     router.refresh();
   }
 
+  async function requestPasswordReset() {
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!normalizedEmail || !normalizedEmail.includes("@")) {
+      setMessage("Escribe tu correo para solicitar el cambio de contraseña.");
+      return;
+    }
+
+    setIsLoading(true);
+    setMessage("");
+    const supabase = createClient();
+    const { error } = await supabase.auth.resetPasswordForEmail(normalizedEmail, {
+      redirectTo: `${window.location.origin}/auth/callback?next=/update-password`,
+    });
+    setIsLoading(false);
+    setMessage(
+      error
+        ? error.message
+        : "Si el correo está registrado, recibirás un enlace para cambiar tu contraseña.",
+    );
+  }
+
   return (
     <form onSubmit={submit} className="mt-6 grid gap-3">
       <div className="grid grid-cols-2 gap-2 rounded-md bg-[#f1eee6] p-1">
@@ -66,22 +87,30 @@ export function AuthForm() {
 
       {mode === "register" && (
         <input
+          autoComplete="name"
           className="h-11 rounded-md border border-black/15 px-3 text-sm"
           placeholder="Nombre"
+          required
           value={fullName}
           onChange={(event) => setFullName(event.target.value)}
         />
       )}
 
       <input
+        autoComplete="email"
         className="h-11 rounded-md border border-black/15 px-3 text-sm"
         placeholder="Email"
+        required
+        type="email"
         value={email}
         onChange={(event) => setEmail(event.target.value)}
       />
       <input
+        autoComplete={mode === "login" ? "current-password" : "new-password"}
         className="h-11 rounded-md border border-black/15 px-3 text-sm"
+        minLength={10}
         placeholder="Password"
+        required
         value={password}
         onChange={(event) => setPassword(event.target.value)}
         type="password"
@@ -93,6 +122,16 @@ export function AuthForm() {
         {isLoading && <Loader2 className="animate-spin" size={16} />}
         {mode === "login" ? "Entrar al dashboard" : "Crear cuenta"}
       </button>
+      {mode === "login" && (
+        <button
+          className="h-10 text-sm font-semibold underline underline-offset-4 disabled:opacity-60"
+          disabled={isLoading}
+          onClick={requestPasswordReset}
+          type="button"
+        >
+          Olvidé mi contraseña
+        </button>
+      )}
       {message && <p className="rounded-md bg-[#f1eee6] p-3 text-sm leading-6 text-[#5f5b50]">{message}</p>}
     </form>
   );

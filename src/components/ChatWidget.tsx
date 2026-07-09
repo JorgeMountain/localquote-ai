@@ -2,7 +2,7 @@
 
 import { SendHorizontal, Sparkles } from "lucide-react";
 import { useState } from "react";
-import type { Business, ChatResponse } from "@/lib/types";
+import type { ChatResponse, PublicBusiness } from "@/lib/types";
 import { currencyCop } from "@/lib/format";
 
 type UiMessage = {
@@ -10,7 +10,7 @@ type UiMessage = {
   body: string;
 };
 
-export function ChatWidget({ business }: { business: Business }) {
+export function ChatWidget({ business }: { business: PublicBusiness }) {
   const [message, setMessage] = useState("");
   const [conversationId, setConversationId] = useState<string>();
   const [customerId, setCustomerId] = useState<string>();
@@ -35,38 +35,40 @@ export function ChatWidget({ business }: { business: Business }) {
     setMessage("");
     setIsSending(true);
 
-    const response = await fetch("/api/chat", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        slug: business.slug,
-        customerName: inferredName,
-        customerPhone: inferredPhone,
-        message: customerMessage,
-        history: messages.slice(-8),
-        conversationId,
-        customerId,
-      }),
-    });
+    try {
+      const response = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          slug: business.slug,
+          customerName: inferredName,
+          customerPhone: inferredPhone,
+          message: customerMessage,
+          conversationId,
+          customerId,
+        }),
+      });
+      const data = (await response.json()) as ChatResponse & { error?: string };
 
-    const data = (await response.json()) as ChatResponse & { error?: string };
-    if (!response.ok) {
+      if (!response.ok) {
+        throw new Error(data.error ?? "No pude guardar el mensaje. Intentalo de nuevo.");
+      }
+
+      setConversationId(data.conversationId);
+      setCustomerId(data.customerId);
+      setLastResponse(data);
+      setMessages((current) => [...current, { role: "assistant", body: data.reply }]);
+    } catch (error) {
       setMessages((current) => [
         ...current,
         {
           role: "assistant",
-          body: data.error ?? "No pude guardar el mensaje. Intentalo de nuevo.",
+          body: error instanceof Error ? error.message : "No pude conectar con el asistente. Intentalo de nuevo.",
         },
       ]);
+    } finally {
       setIsSending(false);
-      return;
     }
-
-    setConversationId(data.conversationId);
-    setCustomerId(data.customerId);
-    setLastResponse(data);
-    setMessages((current) => [...current, { role: "assistant", body: data.reply }]);
-    setIsSending(false);
   }
 
   return (
