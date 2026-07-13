@@ -129,6 +129,9 @@ export const conversations: Conversation[] = [
     channel: "web",
     lastIntent: "appointment",
     createdAt: "2026-06-29T14:20:00.000Z",
+    lastMessageAt: "2026-06-29T14:21:20.000Z",
+    internalNotes: "",
+    tags: [],
   },
   {
     id: "conv-2",
@@ -137,6 +140,9 @@ export const conversations: Conversation[] = [
     channel: "web",
     lastIntent: "quote",
     createdAt: "2026-06-29T16:45:00.000Z",
+    lastMessageAt: "2026-06-29T16:46:30.000Z",
+    internalNotes: "",
+    tags: [],
   },
 ];
 

@@ -6,6 +6,15 @@ export function currencyCop(value: number) {
   }).format(value);
 }
 
+export function currencyUsd(value: number) {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 4,
+  }).format(value);
+}
+
 export function shortDate(value: string) {
   return new Intl.DateTimeFormat("es-CO", {
     month: "short",

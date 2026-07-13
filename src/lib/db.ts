@@ -62,6 +62,10 @@ type ConversationRow = {
   channel: Conversation["channel"];
   last_intent: Conversation["lastIntent"];
   created_at: string;
+  last_message_at: string;
+  last_read_at: string | null;
+  internal_notes: string;
+  tags: string[];
 };
 
 type MessageRow = {
@@ -160,6 +164,8 @@ type PaymentReceiptRow = {
 };
 
 export const pageSize = 20;
+export const dashboardPeriodOptions = [7, 30, 90] as const;
+export type DashboardPeriodDays = (typeof dashboardPeriodOptions)[number];
 
 export async function getBusinessConfigurationData(supabase: SupabaseClient, userId: string) {
   const access = await getViewerAccess(supabase, userId, true);
@@ -201,51 +207,89 @@ export async function getBusinessConfigurationData(supabase: SupabaseClient, use
 export async function getDashboardOverviewData(
   supabase: SupabaseClient,
   userId: string,
-  requestedBusinessId?: string,
+  options: { businessId?: string; periodDays?: number } = {},
 ) {
   const access = await getViewerAccess(supabase, userId);
-  const businessIds = scopedBusinessIds(access.businesses, requestedBusinessId);
+  const periodDays = normalizeDashboardPeriodDays(options.periodDays);
+  const businessIds = scopedBusinessIds(access.businesses, options.businessId);
   if (businessIds.length === 0) {
     return {
       ...access,
       activeBusinessId: undefined,
-      customersCount: 0,
+      periodDays,
+      newCustomersCount: 0,
       conversationsCount: 0,
       pendingAppointmentsCount: 0,
+      confirmedAppointmentsCount: 0,
+      quotesSentCount: 0,
+      quotesAcceptedCount: 0,
+      conversionRate: 0,
       totalQuoted: 0,
+      estimatedAiCost: 0,
       conversations: [] as Conversation[],
       customers: [] as Customer[],
     };
   }
 
-  const [customersCount, conversations, appointmentsCount, quoteValues] = await Promise.all([
-    supabase.from("customers").select("id", { count: "exact", head: true }).in("business_id", businessIds),
+  const since = new Date(Date.now() - periodDays * 24 * 60 * 60 * 1000).toISOString();
+
+  const [customersCount, conversations, appointmentRows, quoteRows, aiRows] = await Promise.all([
+    supabase
+      .from("customers")
+      .select("id", { count: "exact", head: true })
+      .in("business_id", businessIds)
+      .gte("created_at", since),
     supabase
       .from("conversations")
       .select("*", { count: "exact" })
       .in("business_id", businessIds)
-      .order("created_at", { ascending: false })
+      .gte("last_message_at", since)
+      .order("last_message_at", { ascending: false })
       .limit(10),
     supabase
       .from("appointment_requests")
-      .select("id", { count: "exact", head: true })
+      .select("status")
       .in("business_id", businessIds)
-      .eq("status", "pending"),
-    supabase.from("quotes").select("max_price").in("business_id", businessIds).neq("status", "rejected"),
+      .gte("created_at", since),
+    supabase
+      .from("quotes")
+      .select("status,max_price")
+      .in("business_id", businessIds)
+      .gte("created_at", since),
+    supabase
+      .from("ai_generations")
+      .select("estimated_cost")
+      .in("business_id", businessIds)
+      .gte("created_at", since),
   ]);
-  throwQueryErrors([customersCount, conversations, appointmentsCount, quoteValues]);
+  throwQueryErrors([customersCount, conversations, appointmentRows, quoteRows, aiRows]);
 
   const conversationRows = (conversations.data ?? []) as ConversationRow[];
   const customerIds = [...new Set(conversationRows.map((conversation) => conversation.customer_id))];
   const customers = await getCustomersByIds(supabase, customerIds);
+  const appointments = (appointmentRows.data ?? []) as Array<{ status: AppointmentRequest["status"] }>;
+  const quotes = (quoteRows.data ?? []) as Array<{ status: Quote["status"]; max_price: number }>;
+  const aiGenerations = (aiRows.data ?? []) as Array<{ estimated_cost: number }>;
+  const quotesAcceptedCount = quotes.filter((quote) => quote.status === "accepted").length;
 
   return {
     ...access,
-    activeBusinessId: resolveRequestedBusinessId(access.businesses, requestedBusinessId),
-    customersCount: customersCount.count ?? 0,
+    activeBusinessId: resolveRequestedBusinessId(access.businesses, options.businessId),
+    periodDays,
+    newCustomersCount: customersCount.count ?? 0,
     conversationsCount: conversations.count ?? 0,
-    pendingAppointmentsCount: appointmentsCount.count ?? 0,
-    totalQuoted: (quoteValues.data ?? []).reduce((sum, quote) => sum + quote.max_price, 0),
+    pendingAppointmentsCount: appointments.filter((appointment) => appointment.status === "pending").length,
+    confirmedAppointmentsCount: appointments.filter((appointment) => appointment.status === "confirmed").length,
+    quotesSentCount: quotes.filter((quote) => quote.status === "sent").length,
+    quotesAcceptedCount,
+    conversionRate:
+      customersCount.count && customersCount.count > 0
+        ? Math.round((quotesAcceptedCount / customersCount.count) * 100)
+        : 0,
+    totalQuoted: quotes
+      .filter((quote) => quote.status !== "rejected")
+      .reduce((sum, quote) => sum + quote.max_price, 0),
+    estimatedAiCost: aiGenerations.reduce((sum, generation) => sum + Number(generation.estimated_cost || 0), 0),
     conversations: conversationRows.map(mapConversation),
     customers,
   };
@@ -263,7 +307,7 @@ export async function getConversationsPageData(
   let query = supabase.from("conversations").select("*", { count: "exact" }).in("business_id", businessIds);
   query = applyConversationSearch(query, searchScope);
   const result = await query
-    .order("created_at", { ascending: false })
+    .order("last_message_at", { ascending: false })
     .range((page - 1) * pageSize, page * pageSize - 1);
   if (result.error) throw result.error;
 
@@ -511,6 +555,10 @@ function normalizePage(value?: number) {
   return Number.isInteger(value) && (value ?? 0) > 0 ? value! : 1;
 }
 
+export function normalizeDashboardPeriodDays(value?: number): DashboardPeriodDays {
+  return dashboardPeriodOptions.includes(value as DashboardPeriodDays) ? (value as DashboardPeriodDays) : 30;
+}
+
 function emptyQueryResult() {
   return { data: [], error: null };
 }
@@ -614,6 +662,10 @@ function mapConversation(row: ConversationRow): Conversation {
     channel: row.channel,
     lastIntent: row.last_intent,
     createdAt: row.created_at,
+    lastMessageAt: row.last_message_at,
+    lastReadAt: row.last_read_at ?? undefined,
+    internalNotes: row.internal_notes,
+    tags: row.tags ?? [],
   };
 }
 

@@ -1,9 +1,9 @@
 "use client";
 
 import { SendHorizontal, Sparkles } from "lucide-react";
-import { useState } from "react";
-import type { ChatResponse, PublicBusiness } from "@/lib/types";
+import { useEffect, useState } from "react";
 import { currencyCop } from "@/lib/format";
+import type { ChatResponse, PublicBusiness } from "@/lib/types";
 
 type UiMessage = {
   role: "assistant" | "customer";
@@ -14,14 +14,36 @@ export function ChatWidget({ business }: { business: PublicBusiness }) {
   const [message, setMessage] = useState("");
   const [conversationId, setConversationId] = useState<string>();
   const [customerId, setCustomerId] = useState<string>();
-  const [messages, setMessages] = useState<UiMessage[]>([
-    {
-      role: "assistant",
-      body: `Hola, soy el asistente de ${business.name}. ¿En que puedo ayudarte?`,
-    },
-  ]);
+  const [messages, setMessages] = useState<UiMessage[]>(() => initialMessages(business.name));
   const [isSending, setIsSending] = useState(false);
   const [lastResponse, setLastResponse] = useState<ChatResponse | null>(null);
+  const [hasRestoredHistory, setHasRestoredHistory] = useState(false);
+
+  useEffect(() => {
+    const savedChat = readSavedChat(business.slug);
+    if (savedChat) {
+      setConversationId(savedChat.conversationId);
+      setCustomerId(savedChat.customerId);
+      setMessages(savedChat.messages);
+    } else {
+      setConversationId(undefined);
+      setCustomerId(undefined);
+      setMessages(initialMessages(business.name));
+    }
+    setHasRestoredHistory(true);
+  }, [business.name, business.slug]);
+
+  useEffect(() => {
+    if (!hasRestoredHistory) return;
+    window.localStorage.setItem(
+      chatStorageKey(business.slug),
+      JSON.stringify({
+        conversationId,
+        customerId,
+        messages: messages.slice(-50),
+      }),
+    );
+  }, [business.slug, conversationId, customerId, hasRestoredHistory, messages]);
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -71,6 +93,14 @@ export function ChatWidget({ business }: { business: PublicBusiness }) {
     }
   }
 
+  function resetChat() {
+    window.localStorage.removeItem(chatStorageKey(business.slug));
+    setConversationId(undefined);
+    setCustomerId(undefined);
+    setLastResponse(null);
+    setMessages(initialMessages(business.name));
+  }
+
   return (
     <section className="grid min-h-screen bg-[#111111] text-white lg:grid-cols-[0.95fr_1.05fr]">
       <div className="flex flex-col justify-between border-r border-white/10 p-6 sm:p-10">
@@ -107,22 +137,27 @@ export function ChatWidget({ business }: { business: PublicBusiness }) {
 
       <div className="flex items-center justify-center p-4 sm:p-8">
         <div className="w-full max-w-2xl rounded-md border border-white/10 bg-[#f8f6f1] text-[#171717] shadow-2xl">
-          <div className="border-b border-black/10 p-4">
-            <p className="text-sm font-semibold">Chat web tipo WhatsApp</p>
-            <p className="text-xs text-[#706d62]">
-              Prueba la conversacion como llegaria por WhatsApp: el cliente escribe directo.
-            </p>
+          <div className="flex items-start justify-between gap-3 border-b border-black/10 p-4">
+            <div>
+              <p className="text-sm font-semibold">Chat web tipo WhatsApp</p>
+              <p className="text-xs text-[#706d62]">
+                Prueba la conversacion como llegaria por WhatsApp: el cliente escribe directo. Este historial queda en este navegador.
+              </p>
+            </div>
+            <button type="button" onClick={resetChat} className="shrink-0 text-xs font-semibold underline-offset-4 hover:underline">
+              Reiniciar
+            </button>
           </div>
 
           <div className="h-[420px] space-y-3 overflow-y-auto p-4">
             {messages.map((item, index) => (
               <div
-                key={`${item.role}-${index}`}
-                className={`max-w-[82%] rounded-md px-4 py-3 text-sm leading-6 ${
+                key={item.role + "-" + index}
+                className={"max-w-[82%] rounded-md px-4 py-3 text-sm leading-6 " + (
                   item.role === "customer"
                     ? "ml-auto bg-[#d7eb4c]"
                     : "mr-auto border border-black/10 bg-white"
-                }`}
+                )}
               >
                 {item.body}
               </div>
@@ -160,6 +195,47 @@ export function ChatWidget({ business }: { business: PublicBusiness }) {
       </div>
     </section>
   );
+}
+
+function initialMessages(businessName: string): UiMessage[] {
+  return [{ role: "assistant", body: "Hola, soy el asistente de " + businessName + ". En que puedo ayudarte?" }];
+}
+
+function chatStorageKey(slug: string) {
+  return "tactio-chat:" + slug;
+}
+
+function readSavedChat(slug: string): { conversationId?: string; customerId?: string; messages: UiMessage[] } | null {
+  try {
+    const rawValue = window.localStorage.getItem(chatStorageKey(slug));
+    if (!rawValue) return null;
+    const value = JSON.parse(rawValue) as {
+      conversationId?: unknown;
+      customerId?: unknown;
+      messages?: unknown;
+    };
+    if (!Array.isArray(value.messages)) return null;
+
+    const messages = value.messages.filter(isUiMessage).slice(-50);
+    if (messages.length === 0) return null;
+
+    return {
+      conversationId: typeof value.conversationId === "string" ? value.conversationId : undefined,
+      customerId: typeof value.customerId === "string" ? value.customerId : undefined,
+      messages,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function isUiMessage(value: unknown): value is UiMessage {
+  if (!value || typeof value !== "object") return false;
+  const message = value as { role?: unknown; body?: unknown };
+  return (message.role === "assistant" || message.role === "customer")
+    && typeof message.body === "string"
+    && message.body.length > 0
+    && message.body.length <= 4000;
 }
 
 function inferCustomerName(message: string) {

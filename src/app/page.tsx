@@ -1,4 +1,4 @@
-import { CalendarClock, FileText, MessageSquareText, UsersRound } from "lucide-react";
+import { Bot, CalendarClock, CheckCircle2, FileText, MessageSquareText, UsersRound } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AppShell } from "@/components/AppShell";
@@ -6,12 +6,12 @@ import { BusinessFilter } from "@/components/BusinessFilter";
 import { MetricCard } from "@/components/MetricCard";
 import { OnboardingPanel } from "@/components/OnboardingPanel";
 import { StatusBadge } from "@/components/StatusBadge";
-import { currencyCop, shortDate } from "@/lib/format";
-import { getDashboardOverviewData } from "@/lib/db";
+import { currencyCop, currencyUsd, shortDate } from "@/lib/format";
+import { getDashboardOverviewData, normalizeDashboardPeriodDays } from "@/lib/db";
 import { createClient } from "@/lib/supabase/server";
 
 type DashboardPageProps = {
-  searchParams?: Promise<{ business?: string }>;
+  searchParams?: Promise<{ business?: string; period?: string }>;
 };
 
 export default async function DashboardPage({ searchParams }: DashboardPageProps) {
@@ -23,7 +23,11 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
   if (!user) redirect("/login");
 
   const params = await searchParams;
-  const data = await getDashboardOverviewData(supabase, user.id, params?.business);
+  const periodDays = normalizeDashboardPeriodDays(Number(params?.period));
+  const data = await getDashboardOverviewData(supabase, user.id, {
+    businessId: params?.business,
+    periodDays,
+  });
   const activeBusinessId = data.activeBusinessId;
   const scopedBusinesses = activeBusinessId
     ? data.businesses.filter((business) => business.id === activeBusinessId)
@@ -55,32 +59,75 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
           </header>
 
           <div className="mt-5">
-            <BusinessFilter businesses={data.businesses} activeBusinessId={activeBusinessId} basePath="/" />
+            <BusinessFilter
+              businesses={data.businesses}
+              activeBusinessId={activeBusinessId}
+              basePath="/"
+              extraParams={{ period: String(data.periodDays) }}
+            />
           </div>
+
+          <section className="mt-5 flex flex-col gap-3 rounded-md border border-black/10 bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="font-semibold">Periodo de analisis</p>
+              <p className="mt-1 text-sm text-[#706d62]">Las cifras se calculan con actividad ocurrida en este periodo.</p>
+            </div>
+            <div className="flex gap-2">
+              {[7, 30, 90].map((days) => (
+                <Link
+                  key={days}
+                  href={dashboardHref(days, activeBusinessId)}
+                  className={`inline-flex h-10 items-center rounded-md border px-3 text-sm font-semibold ${
+                    data.periodDays === days ? "border-black bg-black text-white" : "border-black/10 hover:border-black/30"
+                  }`}
+                >
+                  {days} dias
+                </Link>
+              ))}
+            </div>
+          </section>
 
           <section className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <MetricCard
               label="Clientes nuevos"
-              value={String(data.customersCount)}
-              detail="Capturados desde chat web y Supabase."
+              value={String(data.newCustomersCount)}
+              detail={`Leads creados en los ultimos ${data.periodDays} dias.`}
               icon={UsersRound}
             />
             <MetricCard
               label="Conversaciones"
               value={String(data.conversationsCount)}
-              detail="Historial por negocio y canal."
+              detail="Con actividad reciente por chat web o WhatsApp."
               icon={MessageSquareText}
             />
             <MetricCard
-              label="Citas pendientes"
-              value={String(data.pendingAppointmentsCount)}
-              detail="Sin calendario externo en esta fase."
+              label="Citas"
+              value={`${data.pendingAppointmentsCount} / ${data.confirmedAppointmentsCount}`}
+              detail="Pendientes / confirmadas en el periodo."
               icon={CalendarClock}
+            />
+            <MetricCard
+              label="Cotizaciones"
+              value={`${data.quotesSentCount} / ${data.quotesAcceptedCount}`}
+              detail="Enviadas / aceptadas en el periodo."
+              icon={FileText}
+            />
+            <MetricCard
+              label="Conversion"
+              value={`${data.conversionRate}%`}
+              detail="Cotizaciones aceptadas frente a clientes nuevos."
+              icon={CheckCircle2}
+            />
+            <MetricCard
+              label="Costo IA estimado"
+              value={currencyUsd(data.estimatedAiCost)}
+              detail="Solo generaciones registradas; no incluye WhatsApp."
+              icon={Bot}
             />
             <MetricCard
               label="Pipeline estimado"
               value={currencyCop(data.totalQuoted)}
-              detail="Suma de cotizaciones maximas."
+              detail="No incluye cotizaciones rechazadas."
               icon={FileText}
             />
           </section>
@@ -101,7 +148,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
                       <th>Negocio</th>
                       <th>Canal</th>
                       <th>Intencion</th>
-                      <th>Creada</th>
+                      <th>Ultimo mensaje</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-black/10">
@@ -116,14 +163,14 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
                           <td>
                             <StatusBadge value={conversation.lastIntent} />
                           </td>
-                          <td>{shortDate(conversation.createdAt)}</td>
+                          <td>{shortDate(conversation.lastMessageAt)}</td>
                         </tr>
                       );
                     })}
                     {data.conversations.length === 0 && (
                       <tr>
                         <td className="py-6 text-[#706d62]" colSpan={5}>
-                          Sin conversaciones para este filtro.
+                          Aun no hay conversaciones en este periodo. Configura el negocio o abre el chat web para probar el flujo.
                         </td>
                       </tr>
                     )}
@@ -133,7 +180,12 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
             </div>
 
             <div className="rounded-md border border-black/10 bg-[#111111] p-5 text-white">
-              <h2 className="text-xl font-semibold">Negocios activos</h2>
+              <div className="flex items-center justify-between gap-3">
+                <h2 className="text-xl font-semibold">Negocios activos</h2>
+                <Link href="/conversations" className="text-sm font-semibold text-[#e2f26b] underline-offset-4 hover:underline">
+                  Gestionar leads
+                </Link>
+              </div>
               <div className="mt-5 space-y-4">
                 {scopedBusinesses.map((business) => (
                   <article key={business.id} className="rounded-md border border-white/10 bg-white/5 p-4">
@@ -161,4 +213,10 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
       )}
     </AppShell>
   );
+}
+
+function dashboardHref(period: number, businessId?: string) {
+  const searchParams = new URLSearchParams({ period: String(period) });
+  if (businessId) searchParams.set("business", businessId);
+  return `/?${searchParams.toString()}`;
 }

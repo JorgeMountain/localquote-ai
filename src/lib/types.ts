@@ -95,6 +95,25 @@ export type Conversation = {
   channel: "web" | "whatsapp";
   lastIntent: "faq" | "quote" | "appointment" | "handoff";
   createdAt: string;
+  lastMessageAt: string;
+  lastReadAt?: string;
+  internalNotes: string;
+  tags: string[];
+};
+
+export type AiGeneration = {
+  id: string;
+  businessId: string;
+  conversationId?: string;
+  provider: string;
+  model: string;
+  inputTokens?: number;
+  outputTokens?: number;
+  estimatedCost: number;
+  latencyMs?: number;
+  status: "success" | "fallback" | "failed";
+  errorMessage?: string;
+  createdAt: string;
 };
 
 export type AppointmentRequest = {

@@ -14,6 +14,66 @@ export type Database = {
   }
   public: {
     Tables: {
+      ai_generations: {
+        Row: {
+          business_id: string
+          conversation_id: string | null
+          created_at: string
+          error_message: string | null
+          estimated_cost: number
+          id: string
+          input_tokens: number | null
+          latency_ms: number | null
+          model: string
+          output_tokens: number | null
+          provider: string
+          status: string
+        }
+        Insert: {
+          business_id: string
+          conversation_id?: string | null
+          created_at?: string
+          error_message?: string | null
+          estimated_cost?: number
+          id?: string
+          input_tokens?: number | null
+          latency_ms?: number | null
+          model: string
+          output_tokens?: number | null
+          provider: string
+          status: string
+        }
+        Update: {
+          business_id?: string
+          conversation_id?: string | null
+          created_at?: string
+          error_message?: string | null
+          estimated_cost?: number
+          id?: string
+          input_tokens?: number | null
+          latency_ms?: number | null
+          model?: string
+          output_tokens?: number | null
+          provider?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_generations_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_generations_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       appointment_requests: {
         Row: {
           business_id: string
@@ -356,7 +416,11 @@ export type Database = {
           created_at: string
           customer_id: string
           id: string
+          internal_notes: string
           last_intent: Database["public"]["Enums"]["conversation_intent"]
+          last_message_at: string
+          last_read_at: string | null
+          tags: string[]
         }
         Insert: {
           business_id: string
@@ -364,7 +428,11 @@ export type Database = {
           created_at?: string
           customer_id: string
           id?: string
+          internal_notes?: string
           last_intent?: Database["public"]["Enums"]["conversation_intent"]
+          last_message_at?: string
+          last_read_at?: string | null
+          tags?: string[]
         }
         Update: {
           business_id?: string
@@ -372,7 +440,11 @@ export type Database = {
           created_at?: string
           customer_id?: string
           id?: string
+          internal_notes?: string
           last_intent?: Database["public"]["Enums"]["conversation_intent"]
+          last_message_at?: string
+          last_read_at?: string | null
+          tags?: string[]
         }
         Relationships: [
           {
@@ -708,6 +780,22 @@ export type Database = {
           p_token: string
         }
         Returns: Json
+      }
+      record_internal_ai_generation: {
+        Args: {
+          p_business_id: string
+          p_conversation_id: string
+          p_error_message?: string
+          p_estimated_cost: number
+          p_input_tokens: number
+          p_latency_ms: number
+          p_model: string
+          p_output_tokens: number
+          p_provider: string
+          p_status: string
+          p_token: string
+        }
+        Returns: undefined
       }
     }
     Enums: {
