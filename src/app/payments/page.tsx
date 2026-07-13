@@ -5,13 +5,14 @@ import { AppShell } from "@/components/AppShell";
 import { BusinessSelectFilter } from "@/components/BusinessSelectFilter";
 import { OnboardingPanel } from "@/components/OnboardingPanel";
 import { PaymentReceiptUploader } from "@/components/PaymentReceiptUploader";
+import { ListToolbar } from "@/components/ListToolbar";
 import { StatusBadge } from "@/components/StatusBadge";
-import { getDashboardData } from "@/lib/db";
+import { getPaymentsPageData } from "@/lib/db";
 import { currencyCop, shortDate } from "@/lib/format";
 import { createClient } from "@/lib/supabase/server";
 
 type PaymentsPageProps = {
-  searchParams?: Promise<{ business?: string }>;
+  searchParams?: Promise<{ business?: string; q?: string; page?: string }>;
 };
 
 export default async function PaymentsPage({ searchParams }: PaymentsPageProps) {
@@ -23,13 +24,14 @@ export default async function PaymentsPage({ searchParams }: PaymentsPageProps) 
   if (!user) redirect("/login");
 
   const params = await searchParams;
-  const data = await getDashboardData(supabase, user.id);
-  const activeBusinessId = data.businesses.some((business) => business.id === params?.business)
-    ? params?.business
-    : undefined;
-  const receipts = data.paymentReceipts.filter(
-    (receipt) => !activeBusinessId || receipt.businessId === activeBusinessId,
-  );
+  const data = await getPaymentsPageData(supabase, user.id, {
+    businessId: params?.business,
+    search: params?.q,
+    page: Number(params?.page),
+  });
+  const activeBusinessId = data.activeBusinessId;
+  const receipts = data.paymentReceipts;
+  const businessById = new Map(data.businesses.map((business) => [business.id, business]));
   const receiptUrls = new Map(
     await Promise.all(
       receipts.map(async (receipt) => {
@@ -64,6 +66,14 @@ export default async function PaymentsPage({ searchParams }: PaymentsPageProps) 
             basePath="/payments"
             allLabel="Todos los comprobantes"
           />
+          <ListToolbar
+            basePath="/payments"
+            businessId={activeBusinessId}
+            search={params?.q}
+            page={data.page}
+            totalPages={data.totalPages}
+            placeholder="Buscar negocio, archivo o periodo"
+          />
 
           <section className="overflow-x-auto rounded-xl border border-black/10 bg-white p-5 shadow-sm">
             <table className="w-full min-w-[900px] text-left text-sm">
@@ -79,7 +89,7 @@ export default async function PaymentsPage({ searchParams }: PaymentsPageProps) 
               </thead>
               <tbody className="divide-y divide-black/10">
                 {receipts.map((receipt) => {
-                  const business = data.businesses.find((item) => item.id === receipt.businessId);
+                  const business = businessById.get(receipt.businessId);
                   const signedUrl = receiptUrls.get(receipt.id);
                   return (
                     <tr key={receipt.id} className="align-top">

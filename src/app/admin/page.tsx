@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { AppShell } from "@/components/AppShell";
 import { MetricCard } from "@/components/MetricCard";
-import { getDashboardData } from "@/lib/db";
+import { getAdminPageData } from "@/lib/db";
 import { createClient } from "@/lib/supabase/server";
 import { BriefcaseBusiness, MessageSquareText, ShieldCheck, UsersRound } from "lucide-react";
 
@@ -14,11 +14,14 @@ export default async function AdminPage() {
 
   if (!user) redirect("/login");
 
-  const data = await getDashboardData(supabase, user.id);
+  const data = await getAdminPageData(supabase, user.id);
   if (data.viewerProfile.role !== "platform_admin") redirect("/");
 
   const ownerProfiles = data.profiles.filter((profile) => profile.role === "business_owner");
   const ownerById = new Map(data.profiles.map((profile) => [profile.id, profile]));
+  const customerCounts = countByBusiness(data.customerBusinessIds);
+  const appointmentCounts = countByBusiness(data.appointmentBusinessIds);
+  const quoteCounts = countByBusiness(data.quoteBusinessIds);
 
   return (
     <AppShell viewerProfile={data.viewerProfile}>
@@ -33,7 +36,7 @@ export default async function AdminPage() {
       <section className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <MetricCard label="Negocios" value={String(data.businesses.length)} detail="Todos los negocios creados." icon={BriefcaseBusiness} />
         <MetricCard label="Dueños negocio" value={String(ownerProfiles.length)} detail="Usuarios tipo cliente." icon={UsersRound} />
-        <MetricCard label="Conversaciones" value={String(data.conversations.length)} detail="Web y WhatsApp." icon={MessageSquareText} />
+        <MetricCard label="Conversaciones" value={String(data.conversationsCount)} detail="Web y WhatsApp." icon={MessageSquareText} />
         <MetricCard label="Admins" value={String(data.profiles.length - ownerProfiles.length)} detail="Usuarios plataforma." icon={ShieldCheck} />
       </section>
 
@@ -110,11 +113,9 @@ export default async function AdminPage() {
                     <td className="py-3 pr-4 font-semibold">{business.name}</td>
                     <td className="py-3 pr-4 text-[#706d62]">{owner?.email ?? owner?.fullName ?? business.ownerId}</td>
                     <td className="py-3 pr-4 text-[#706d62]">{business.slug}</td>
-                    <td className="py-3 pr-4">{data.customers.filter((customer) => customer.businessId === business.id).length}</td>
-                    <td className="py-3 pr-4">
-                      {data.appointmentRequests.filter((appointment) => appointment.businessId === business.id).length}
-                    </td>
-                    <td className="py-3">{data.quotes.filter((quote) => quote.businessId === business.id).length}</td>
+                    <td className="py-3 pr-4">{customerCounts.get(business.id) ?? 0}</td>
+                    <td className="py-3 pr-4">{appointmentCounts.get(business.id) ?? 0}</td>
+                    <td className="py-3">{quoteCounts.get(business.id) ?? 0}</td>
                   </tr>
                 );
               })}
@@ -124,4 +125,10 @@ export default async function AdminPage() {
       </section>
     </AppShell>
   );
+}
+
+function countByBusiness(businessIds: string[]) {
+  const counts = new Map<string, number>();
+  for (const businessId of businessIds) counts.set(businessId, (counts.get(businessId) ?? 0) + 1);
+  return counts;
 }

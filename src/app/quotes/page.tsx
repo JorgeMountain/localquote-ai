@@ -3,13 +3,14 @@ import { QuickQuoteAcceptedButton, QuickQuoteSentButton, QuoteStatusForm } from 
 import { AppShell } from "@/components/AppShell";
 import { BusinessFilter } from "@/components/BusinessFilter";
 import { OnboardingPanel } from "@/components/OnboardingPanel";
+import { ListToolbar } from "@/components/ListToolbar";
 import { StatusBadge } from "@/components/StatusBadge";
 import { currencyCop } from "@/lib/format";
-import { getDashboardData } from "@/lib/db";
+import { getQuotesPageData } from "@/lib/db";
 import { createClient } from "@/lib/supabase/server";
 
 type QuotesPageProps = {
-  searchParams?: Promise<{ business?: string }>;
+  searchParams?: Promise<{ business?: string; q?: string; page?: string }>;
 };
 
 export default async function QuotesPage({ searchParams }: QuotesPageProps) {
@@ -21,11 +22,15 @@ export default async function QuotesPage({ searchParams }: QuotesPageProps) {
   if (!user) redirect("/login");
 
   const params = await searchParams;
-  const data = await getDashboardData(supabase, user.id);
-  const activeBusinessId = data.businesses.some((business) => business.id === params?.business)
-    ? params?.business
-    : undefined;
-  const quotes = data.quotes.filter((quote) => !activeBusinessId || quote.businessId === activeBusinessId);
+  const data = await getQuotesPageData(supabase, user.id, {
+    businessId: params?.business,
+    search: params?.q,
+    page: Number(params?.page),
+  });
+  const activeBusinessId = data.activeBusinessId;
+  const quotes = data.quotes;
+  const customerById = new Map(data.customers.map((customer) => [customer.id, customer]));
+  const businessById = new Map(data.businesses.map((business) => [business.id, business]));
 
   return (
     <AppShell viewerProfile={data.viewerProfile}>
@@ -39,10 +44,17 @@ export default async function QuotesPage({ searchParams }: QuotesPageProps) {
       ) : (
         <div className="grid gap-6">
           <BusinessFilter businesses={data.businesses} activeBusinessId={activeBusinessId} basePath="/quotes" />
+          <ListToolbar
+            basePath="/quotes"
+            businessId={activeBusinessId}
+            search={params?.q}
+            page={data.page}
+            totalPages={data.totalPages}
+          />
           <div className="grid gap-4">
             {quotes.map((quote) => {
-              const customer = data.customers.find((item) => item.id === quote.customerId);
-              const business = data.businesses.find((item) => item.id === quote.businessId);
+              const customer = customerById.get(quote.customerId);
+              const business = businessById.get(quote.businessId);
               return (
                 <article key={quote.id} className="rounded-md border border-black/10 bg-white p-5">
                   <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">

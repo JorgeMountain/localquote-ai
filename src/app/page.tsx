@@ -7,7 +7,7 @@ import { MetricCard } from "@/components/MetricCard";
 import { OnboardingPanel } from "@/components/OnboardingPanel";
 import { StatusBadge } from "@/components/StatusBadge";
 import { currencyCop, shortDate } from "@/lib/format";
-import { getDashboardData } from "@/lib/db";
+import { getDashboardOverviewData } from "@/lib/db";
 import { createClient } from "@/lib/supabase/server";
 
 type DashboardPageProps = {
@@ -23,22 +23,13 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
   if (!user) redirect("/login");
 
   const params = await searchParams;
-  const data = await getDashboardData(supabase, user.id);
-  const activeBusinessId = data.businesses.some((business) => business.id === params?.business)
-    ? params?.business
-    : undefined;
+  const data = await getDashboardOverviewData(supabase, user.id, params?.business);
+  const activeBusinessId = data.activeBusinessId;
   const scopedBusinesses = activeBusinessId
     ? data.businesses.filter((business) => business.id === activeBusinessId)
     : data.businesses;
-  const scopedCustomers = data.customers.filter((customer) => !activeBusinessId || customer.businessId === activeBusinessId);
-  const scopedConversations = data.conversations.filter(
-    (conversation) => !activeBusinessId || conversation.businessId === activeBusinessId,
-  );
-  const scopedAppointments = data.appointmentRequests.filter(
-    (appointment) => !activeBusinessId || appointment.businessId === activeBusinessId,
-  );
-  const scopedQuotes = data.quotes.filter((quote) => !activeBusinessId || quote.businessId === activeBusinessId);
-  const totalQuoted = scopedQuotes.reduce((sum, quote) => sum + quote.maxPrice, 0);
+  const customerById = new Map(data.customers.map((customer) => [customer.id, customer]));
+  const businessById = new Map(data.businesses.map((business) => [business.id, business]));
 
   return (
     <AppShell viewerProfile={data.viewerProfile}>
@@ -70,25 +61,25 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
           <section className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <MetricCard
               label="Clientes nuevos"
-              value={String(scopedCustomers.length)}
+              value={String(data.customersCount)}
               detail="Capturados desde chat web y Supabase."
               icon={UsersRound}
             />
             <MetricCard
               label="Conversaciones"
-              value={String(scopedConversations.length)}
+              value={String(data.conversationsCount)}
               detail="Historial por negocio y canal."
               icon={MessageSquareText}
             />
             <MetricCard
               label="Citas pendientes"
-              value={String(scopedAppointments.filter((item) => item.status === "pending").length)}
+              value={String(data.pendingAppointmentsCount)}
               detail="Sin calendario externo en esta fase."
               icon={CalendarClock}
             />
             <MetricCard
               label="Pipeline estimado"
-              value={currencyCop(totalQuoted)}
+              value={currencyCop(data.totalQuoted)}
               detail="Suma de cotizaciones maximas."
               icon={FileText}
             />
@@ -114,9 +105,9 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-black/10">
-                    {scopedConversations.map((conversation) => {
-                      const customer = data.customers.find((item) => item.id === conversation.customerId);
-                      const business = data.businesses.find((item) => item.id === conversation.businessId);
+                    {data.conversations.map((conversation) => {
+                      const customer = customerById.get(conversation.customerId);
+                      const business = businessById.get(conversation.businessId);
                       return (
                         <tr key={conversation.id}>
                           <td className="py-4 font-medium">{customer?.name}</td>
@@ -129,7 +120,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
                         </tr>
                       );
                     })}
-                    {scopedConversations.length === 0 && (
+                    {data.conversations.length === 0 && (
                       <tr>
                         <td className="py-6 text-[#706d62]" colSpan={5}>
                           Sin conversaciones para este filtro.

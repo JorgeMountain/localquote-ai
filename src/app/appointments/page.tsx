@@ -3,12 +3,13 @@ import { AppointmentStatusForm, QuickAppointmentButton } from "@/components/Acti
 import { AppShell } from "@/components/AppShell";
 import { BusinessSelectFilter } from "@/components/BusinessSelectFilter";
 import { OnboardingPanel } from "@/components/OnboardingPanel";
+import { ListToolbar } from "@/components/ListToolbar";
 import { StatusBadge } from "@/components/StatusBadge";
-import { getDashboardData } from "@/lib/db";
+import { getAppointmentsPageData } from "@/lib/db";
 import { createClient } from "@/lib/supabase/server";
 
 type AppointmentsPageProps = {
-  searchParams?: Promise<{ business?: string }>;
+  searchParams?: Promise<{ business?: string; q?: string; page?: string }>;
 };
 
 export default async function AppointmentsPage({ searchParams }: AppointmentsPageProps) {
@@ -20,13 +21,15 @@ export default async function AppointmentsPage({ searchParams }: AppointmentsPag
   if (!user) redirect("/login");
 
   const params = await searchParams;
-  const data = await getDashboardData(supabase, user.id);
-  const activeBusinessId = data.businesses.some((business) => business.id === params?.business)
-    ? params?.business
-    : undefined;
-  const appointments = data.appointmentRequests.filter(
-    (appointment) => !activeBusinessId || appointment.businessId === activeBusinessId,
-  );
+  const data = await getAppointmentsPageData(supabase, user.id, {
+    businessId: params?.business,
+    search: params?.q,
+    page: Number(params?.page),
+  });
+  const activeBusinessId = data.activeBusinessId;
+  const appointments = data.appointmentRequests;
+  const customerById = new Map(data.customers.map((customer) => [customer.id, customer]));
+  const businessById = new Map(data.businesses.map((business) => [business.id, business]));
 
   return (
     <AppShell viewerProfile={data.viewerProfile}>
@@ -45,6 +48,13 @@ export default async function AppointmentsPage({ searchParams }: AppointmentsPag
             basePath="/appointments"
             allLabel="Todas las solicitudes"
           />
+          <ListToolbar
+            basePath="/appointments"
+            businessId={activeBusinessId}
+            search={params?.q}
+            page={data.page}
+            totalPages={data.totalPages}
+          />
           <div className="overflow-x-auto rounded-md border border-black/10 bg-white p-5">
             <table className="w-full min-w-[920px] text-left text-sm">
               <thead className="text-xs uppercase tracking-[0.18em] text-[#706d62]">
@@ -60,8 +70,8 @@ export default async function AppointmentsPage({ searchParams }: AppointmentsPag
               </thead>
               <tbody className="divide-y divide-black/10">
                 {appointments.map((appointment) => {
-                  const customer = data.customers.find((item) => item.id === appointment.customerId);
-                  const business = data.businesses.find((item) => item.id === appointment.businessId);
+                  const customer = customerById.get(appointment.customerId);
+                  const business = businessById.get(appointment.businessId);
                   return (
                     <tr key={appointment.id} className="align-top">
                       <td className="py-4 font-medium">

@@ -159,133 +159,365 @@ type PaymentReceiptRow = {
   reviewed_at: string | null;
 };
 
-export type DashboardData = {
-  viewerProfile: Profile;
-  profiles: Profile[];
-  businesses: Business[];
-  faqs: BusinessFaq[];
-  businessServices: BusinessService[];
-  customers: Customer[];
-  conversations: Conversation[];
-  messages: Message[];
-  appointmentRequests: AppointmentRequest[];
-  quotes: Quote[];
-  businessHours: BusinessHour[];
-  availabilitySlots: AvailabilitySlot[];
-  businessLinks: BusinessLink[];
-  paymentReceipts: PaymentReceipt[];
-};
+export const pageSize = 20;
 
-export async function getDashboardData(supabase: SupabaseClient, ownerId: string): Promise<DashboardData> {
-  const viewerProfile = await getProfile(supabase, ownerId);
-  const isPlatformAdmin = viewerProfile.role === "platform_admin";
-  const businessQuery = supabase
-    .from("businesses")
-    .select("*")
-    .order("created_at", { ascending: true });
-
-  if (!isPlatformAdmin) businessQuery.eq("owner_id", ownerId);
-
-  const { data: businessRows, error: businessesError } = await businessQuery;
-
-  if (businessesError) throw businessesError;
-
-  const businesses = (businessRows ?? []).map(mapBusiness);
-  const businessIds = businesses.map((business) => business.id);
-  const profiles = isPlatformAdmin ? await getProfiles(supabase) : [viewerProfile];
-
-  if (businessIds.length === 0) {
+export async function getBusinessConfigurationData(supabase: SupabaseClient, userId: string) {
+  const access = await getViewerAccess(supabase, userId, true);
+  if (access.businessIds.length === 0) {
     return {
-      viewerProfile,
-      profiles,
-      businesses,
-      faqs: [],
-      businessServices: [],
-      customers: [],
-      conversations: [],
-      messages: [],
-      appointmentRequests: [],
-      quotes: [],
-      businessHours: [],
-      availabilitySlots: [],
-      businessLinks: [],
-      paymentReceipts: [],
+      ...access,
+      faqs: [] as BusinessFaq[],
+      businessServices: [] as BusinessService[],
+      businessHours: [] as BusinessHour[],
+      availabilitySlots: [] as AvailabilitySlot[],
+      businessLinks: [] as BusinessLink[],
     };
   }
 
-  const [
-    faqsResult,
-    businessServicesResult,
-    customersResult,
-    conversationsResult,
-    appointmentsResult,
-    quotesResult,
-    businessHoursResult,
-    availabilitySlotsResult,
-    businessLinksResult,
-    paymentReceiptsResult,
-  ] =
-    await Promise.all([
-      supabase.from("business_faqs").select("*").in("business_id", businessIds),
-      supabase.from("business_services").select("*").in("business_id", businessIds).order("created_at"),
-      supabase.from("customers").select("*").in("business_id", businessIds).order("created_at", { ascending: false }),
-      supabase
-        .from("conversations")
-        .select("*")
-        .in("business_id", businessIds)
-        .order("created_at", { ascending: false }),
-      supabase.from("appointment_requests").select("*").in("business_id", businessIds),
-      supabase.from("quotes").select("*").in("business_id", businessIds),
-      supabase.from("business_hours").select("*").in("business_id", businessIds).order("day_of_week"),
-      supabase
-        .from("availability_slots")
-        .select("*")
-        .in("business_id", businessIds)
-        .order("date")
-        .order("start_time"),
-      supabase.from("business_links").select("*").in("business_id", businessIds).order("created_at"),
-      supabase.from("payment_receipts").select("*").in("business_id", businessIds).order("created_at", { ascending: false }),
-    ]);
+  const [faqs, services, hours, slots, links] = await Promise.all([
+    supabase.from("business_faqs").select("*").in("business_id", access.businessIds),
+    supabase.from("business_services").select("*").in("business_id", access.businessIds).order("created_at"),
+    supabase.from("business_hours").select("*").in("business_id", access.businessIds).order("day_of_week"),
+    supabase
+      .from("availability_slots")
+      .select("*")
+      .in("business_id", access.businessIds)
+      .order("date")
+      .order("start_time"),
+    supabase.from("business_links").select("*").in("business_id", access.businessIds).order("created_at"),
+  ]);
+  throwQueryErrors([faqs, services, hours, slots, links]);
 
-  for (const result of [
-    faqsResult,
-    businessServicesResult,
-    customersResult,
-    conversationsResult,
-    appointmentsResult,
-    quotesResult,
-    businessHoursResult,
-    availabilitySlotsResult,
-    businessLinksResult,
-    paymentReceiptsResult,
-  ]) {
-    if (result.error) throw result.error;
+  return {
+    ...access,
+    faqs: ((faqs.data ?? []) as FaqRow[]).map(mapFaq),
+    businessServices: ((services.data ?? []) as BusinessServiceRow[]).map(mapBusinessService),
+    businessHours: ((hours.data ?? []) as BusinessHourRow[]).map(mapBusinessHour),
+    availabilitySlots: ((slots.data ?? []) as AvailabilitySlotRow[]).map(mapAvailabilitySlot),
+    businessLinks: ((links.data ?? []) as BusinessLinkRow[]).map(mapBusinessLink),
+  };
+}
+
+export async function getDashboardOverviewData(
+  supabase: SupabaseClient,
+  userId: string,
+  requestedBusinessId?: string,
+) {
+  const access = await getViewerAccess(supabase, userId);
+  const businessIds = scopedBusinessIds(access.businesses, requestedBusinessId);
+  if (businessIds.length === 0) {
+    return {
+      ...access,
+      activeBusinessId: undefined,
+      customersCount: 0,
+      conversationsCount: 0,
+      pendingAppointmentsCount: 0,
+      totalQuoted: 0,
+      conversations: [] as Conversation[],
+      customers: [] as Customer[],
+    };
   }
 
-  const conversationIds = (conversationsResult.data ?? []).map((conversation) => conversation.id);
-  const messagesResult =
-    conversationIds.length > 0
-      ? await supabase.from("messages").select("*").in("conversation_id", conversationIds).order("created_at")
-      : { data: [], error: null };
+  const [customersCount, conversations, appointmentsCount, quoteValues] = await Promise.all([
+    supabase.from("customers").select("id", { count: "exact", head: true }).in("business_id", businessIds),
+    supabase
+      .from("conversations")
+      .select("*", { count: "exact" })
+      .in("business_id", businessIds)
+      .order("created_at", { ascending: false })
+      .limit(10),
+    supabase
+      .from("appointment_requests")
+      .select("id", { count: "exact", head: true })
+      .in("business_id", businessIds)
+      .eq("status", "pending"),
+    supabase.from("quotes").select("max_price").in("business_id", businessIds).neq("status", "rejected"),
+  ]);
+  throwQueryErrors([customersCount, conversations, appointmentsCount, quoteValues]);
 
-  if (messagesResult.error) throw messagesResult.error;
+  const conversationRows = (conversations.data ?? []) as ConversationRow[];
+  const customerIds = [...new Set(conversationRows.map((conversation) => conversation.customer_id))];
+  const customers = await getCustomersByIds(supabase, customerIds);
+
+  return {
+    ...access,
+    activeBusinessId: resolveRequestedBusinessId(access.businesses, requestedBusinessId),
+    customersCount: customersCount.count ?? 0,
+    conversationsCount: conversations.count ?? 0,
+    pendingAppointmentsCount: appointmentsCount.count ?? 0,
+    totalQuoted: (quoteValues.data ?? []).reduce((sum, quote) => sum + quote.max_price, 0),
+    conversations: conversationRows.map(mapConversation),
+    customers,
+  };
+}
+
+export async function getConversationsPageData(
+  supabase: SupabaseClient,
+  userId: string,
+  options: { businessId?: string; search?: string; page?: number; conversationId?: string },
+) {
+  const access = await getViewerAccess(supabase, userId);
+  const businessIds = scopedBusinessIds(access.businesses, options.businessId);
+  const page = normalizePage(options.page);
+  const searchScope = await getSearchScope(supabase, access.businesses, businessIds, options.search);
+  let query = supabase.from("conversations").select("*", { count: "exact" }).in("business_id", businessIds);
+  query = applyConversationSearch(query, searchScope);
+  const result = await query
+    .order("created_at", { ascending: false })
+    .range((page - 1) * pageSize, page * pageSize - 1);
+  if (result.error) throw result.error;
+
+  const conversations = ((result.data ?? []) as ConversationRow[]).map(mapConversation);
+  const selectedConversation =
+    conversations.find((conversation) => conversation.id === options.conversationId) ?? conversations[0];
+  const customerIds = [...new Set(conversations.map((conversation) => conversation.customerId))];
+  const customers = await getCustomersByIds(supabase, customerIds);
+  const selectedCustomer = selectedConversation
+    ? customers.find((customer) => customer.id === selectedConversation.customerId)
+    : undefined;
+
+  const [messages, appointments, quotes] = selectedConversation && selectedCustomer
+    ? await Promise.all([
+        supabase.from("messages").select("*").eq("conversation_id", selectedConversation.id).order("created_at"),
+        supabase.from("appointment_requests").select("*").eq("customer_id", selectedCustomer.id).order("created_at", { ascending: false }),
+        supabase.from("quotes").select("*").eq("customer_id", selectedCustomer.id).order("created_at", { ascending: false }),
+      ])
+    : [emptyQueryResult(), emptyQueryResult(), emptyQueryResult()];
+  throwQueryErrors([messages, appointments, quotes]);
+
+  return {
+    ...access,
+    activeBusinessId: resolveRequestedBusinessId(access.businesses, options.businessId),
+    conversations,
+    customers,
+    selectedConversation,
+    selectedCustomer,
+    messages: ((messages.data ?? []) as MessageRow[]).map(mapMessage),
+    appointmentRequests: ((appointments.data ?? []) as AppointmentRow[]).map(mapAppointment),
+    quotes: ((quotes.data ?? []) as QuoteRow[]).map(mapQuote),
+    page,
+    totalPages: Math.max(1, Math.ceil((result.count ?? 0) / pageSize)),
+  };
+}
+
+export async function getAppointmentsPageData(
+  supabase: SupabaseClient,
+  userId: string,
+  options: { businessId?: string; search?: string; page?: number },
+) {
+  const access = await getViewerAccess(supabase, userId);
+  const businessIds = scopedBusinessIds(access.businesses, options.businessId);
+  const page = normalizePage(options.page);
+  const searchScope = await getSearchScope(supabase, access.businesses, businessIds, options.search);
+  let query = supabase.from("appointment_requests").select("*", { count: "exact" }).in("business_id", businessIds);
+  query = applyCommercialSearch(query, searchScope, "service");
+  const result = await query
+    .order("preferred_date", { ascending: false })
+    .order("preferred_time", { ascending: false })
+    .range((page - 1) * pageSize, page * pageSize - 1);
+  if (result.error) throw result.error;
+  const appointments = ((result.data ?? []) as AppointmentRow[]).map(mapAppointment);
+
+  return {
+    ...access,
+    activeBusinessId: resolveRequestedBusinessId(access.businesses, options.businessId),
+    appointmentRequests: appointments,
+    customers: await getCustomersByIds(supabase, [...new Set(appointments.map((item) => item.customerId))]),
+    page,
+    totalPages: Math.max(1, Math.ceil((result.count ?? 0) / pageSize)),
+  };
+}
+
+export async function getQuotesPageData(
+  supabase: SupabaseClient,
+  userId: string,
+  options: { businessId?: string; search?: string; page?: number },
+) {
+  const access = await getViewerAccess(supabase, userId);
+  const businessIds = scopedBusinessIds(access.businesses, options.businessId);
+  const page = normalizePage(options.page);
+  const searchScope = await getSearchScope(supabase, access.businesses, businessIds, options.search);
+  let query = supabase.from("quotes").select("*", { count: "exact" }).in("business_id", businessIds);
+  query = applyCommercialSearch(query, searchScope, "service");
+  const result = await query
+    .order("created_at", { ascending: false })
+    .range((page - 1) * pageSize, page * pageSize - 1);
+  if (result.error) throw result.error;
+  const quotes = ((result.data ?? []) as QuoteRow[]).map(mapQuote);
+
+  return {
+    ...access,
+    activeBusinessId: resolveRequestedBusinessId(access.businesses, options.businessId),
+    quotes,
+    customers: await getCustomersByIds(supabase, [...new Set(quotes.map((item) => item.customerId))]),
+    page,
+    totalPages: Math.max(1, Math.ceil((result.count ?? 0) / pageSize)),
+  };
+}
+
+export async function getPaymentsPageData(
+  supabase: SupabaseClient,
+  userId: string,
+  options: { businessId?: string; search?: string; page?: number },
+) {
+  const access = await getViewerAccess(supabase, userId);
+  const businessIds = scopedBusinessIds(access.businesses, options.businessId);
+  const page = normalizePage(options.page);
+  const search = normalizeSearch(options.search);
+  const matchingBusinessIds = search
+    ? businessIds.filter((id) => access.businesses.find((business) => business.id === id)?.name.toLowerCase().includes(search))
+    : businessIds;
+  let query = supabase.from("payment_receipts").select("*", { count: "exact" }).in("business_id", businessIds);
+  if (search) {
+    const filters = [`original_name.ilike.%${search}%`, `billing_period.ilike.%${search}%`];
+    if (matchingBusinessIds.length > 0) filters.push(`business_id.in.(${matchingBusinessIds.join(",")})`);
+    query = query.or(filters.join(","));
+  }
+  const result = await query
+    .order("created_at", { ascending: false })
+    .range((page - 1) * pageSize, page * pageSize - 1);
+  if (result.error) throw result.error;
+
+  return {
+    ...access,
+    activeBusinessId: resolveRequestedBusinessId(access.businesses, options.businessId),
+    paymentReceipts: ((result.data ?? []) as PaymentReceiptRow[]).map(mapPaymentReceipt),
+    page,
+    totalPages: Math.max(1, Math.ceil((result.count ?? 0) / pageSize)),
+  };
+}
+
+export async function getAdminPageData(supabase: SupabaseClient, userId: string) {
+  const access = await getViewerAccess(supabase, userId, true);
+  if (access.viewerProfile.role !== "platform_admin" || access.businessIds.length === 0) {
+    return { ...access, customerBusinessIds: [] as string[], appointmentBusinessIds: [] as string[], quoteBusinessIds: [] as string[], conversationsCount: 0 };
+  }
+  const [customers, appointments, quotes, conversations] = await Promise.all([
+    supabase.from("customers").select("business_id").in("business_id", access.businessIds),
+    supabase.from("appointment_requests").select("business_id").in("business_id", access.businessIds),
+    supabase.from("quotes").select("business_id").in("business_id", access.businessIds),
+    supabase.from("conversations").select("id", { count: "exact", head: true }).in("business_id", access.businessIds),
+  ]);
+  throwQueryErrors([customers, appointments, quotes, conversations]);
+  return {
+    ...access,
+    customerBusinessIds: (customers.data ?? []).map((row) => row.business_id),
+    appointmentBusinessIds: (appointments.data ?? []).map((row) => row.business_id),
+    quoteBusinessIds: (quotes.data ?? []).map((row) => row.business_id),
+    conversationsCount: conversations.count ?? 0,
+  };
+}
+
+type SearchScope = {
+  value: string;
+  customerIds: string[];
+  businessIds: string[];
+};
+
+const emptyBusinessId = "00000000-0000-0000-0000-000000000000";
+
+async function getViewerAccess(supabase: SupabaseClient, userId: string, includeProfiles = false) {
+  const viewerProfile = await getProfile(supabase, userId);
+  const businessQuery = supabase.from("businesses").select("*").order("created_at");
+  if (viewerProfile.role !== "platform_admin") businessQuery.eq("owner_id", userId);
+  const { data, error } = await businessQuery;
+  if (error) throw error;
+  const businesses = ((data ?? []) as BusinessRow[]).map(mapBusiness);
 
   return {
     viewerProfile,
-    profiles,
+    profiles: includeProfiles && viewerProfile.role === "platform_admin" ? await getProfiles(supabase) : [viewerProfile],
     businesses,
-    faqs: ((faqsResult.data ?? []) as FaqRow[]).map(mapFaq),
-    businessServices: ((businessServicesResult.data ?? []) as BusinessServiceRow[]).map(mapBusinessService),
-    customers: ((customersResult.data ?? []) as CustomerRow[]).map(mapCustomer),
-    conversations: ((conversationsResult.data ?? []) as ConversationRow[]).map(mapConversation),
-    messages: ((messagesResult.data ?? []) as MessageRow[]).map(mapMessage),
-    appointmentRequests: ((appointmentsResult.data ?? []) as AppointmentRow[]).map(mapAppointment),
-    quotes: ((quotesResult.data ?? []) as QuoteRow[]).map(mapQuote),
-    businessHours: ((businessHoursResult.data ?? []) as BusinessHourRow[]).map(mapBusinessHour),
-    availabilitySlots: ((availabilitySlotsResult.data ?? []) as AvailabilitySlotRow[]).map(mapAvailabilitySlot),
-    businessLinks: ((businessLinksResult.data ?? []) as BusinessLinkRow[]).map(mapBusinessLink),
-    paymentReceipts: ((paymentReceiptsResult.data ?? []) as PaymentReceiptRow[]).map(mapPaymentReceipt),
+    businessIds: businesses.map((business) => business.id),
   };
+}
+
+function resolveRequestedBusinessId(businesses: Business[], requestedBusinessId?: string) {
+  return businesses.some((business) => business.id === requestedBusinessId) ? requestedBusinessId : undefined;
+}
+
+function scopedBusinessIds(businesses: Business[], requestedBusinessId?: string) {
+  const activeBusinessId = resolveRequestedBusinessId(businesses, requestedBusinessId);
+  const ids = activeBusinessId ? [activeBusinessId] : businesses.map((business) => business.id);
+  return ids.length > 0 ? ids : [emptyBusinessId];
+}
+
+async function getCustomersByIds(supabase: SupabaseClient, customerIds: string[]) {
+  if (customerIds.length === 0) return [] as Customer[];
+  const { data, error } = await supabase.from("customers").select("*").in("id", customerIds);
+  if (error) throw error;
+  return ((data ?? []) as CustomerRow[]).map(mapCustomer);
+}
+
+async function getSearchScope(
+  supabase: SupabaseClient,
+  businesses: Business[],
+  businessIds: string[],
+  rawSearch?: string,
+): Promise<SearchScope> {
+  const value = normalizeSearch(rawSearch);
+  if (!value) return { value: "", customerIds: [], businessIds: [] };
+
+  const { data, error } = await supabase
+    .from("customers")
+    .select("id")
+    .in("business_id", businessIds)
+    .or(`name.ilike.%${value}%,phone.ilike.%${value}%`)
+    .limit(200);
+  if (error) throw error;
+
+  return {
+    value,
+    customerIds: (data ?? []).map((customer) => customer.id),
+    businessIds: businesses
+      .filter((business) => businessIds.includes(business.id) && business.name.toLowerCase().includes(value))
+      .map((business) => business.id),
+  };
+}
+
+function applyConversationSearch<T extends { or: (filters: string) => T }>(query: T, scope: SearchScope) {
+  if (!scope.value) return query;
+  const filters = buildRelationshipFilters(scope);
+  return query.or(filters.length > 0 ? filters.join(",") : `id.eq.${emptyBusinessId}`);
+}
+
+function applyCommercialSearch<T extends { or: (filters: string) => T }>(
+  query: T,
+  scope: SearchScope,
+  textColumn: string,
+) {
+  if (!scope.value) return query;
+  const filters = [...buildRelationshipFilters(scope), `${textColumn}.ilike.%${scope.value}%`];
+  return query.or(filters.join(","));
+}
+
+function buildRelationshipFilters(scope: SearchScope) {
+  const filters: string[] = [];
+  if (scope.customerIds.length > 0) filters.push(`customer_id.in.(${scope.customerIds.join(",")})`);
+  if (scope.businessIds.length > 0) filters.push(`business_id.in.(${scope.businessIds.join(",")})`);
+  return filters;
+}
+
+function normalizeSearch(value?: string) {
+  return (value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[,%()]/g, " ")
+    .replace(/\s+/g, " ")
+    .slice(0, 80);
+}
+
+function normalizePage(value?: number) {
+  return Number.isInteger(value) && (value ?? 0) > 0 ? value! : 1;
+}
+
+function emptyQueryResult() {
+  return { data: [], error: null };
+}
+
+function throwQueryErrors(results: Array<{ error: unknown }>) {
+  const failed = results.find((result) => result.error);
+  if (failed?.error) throw failed.error;
 }
 
 export async function getProfile(supabase: SupabaseClient, profileId: string): Promise<Profile> {

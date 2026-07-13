@@ -11,13 +11,14 @@ import {
 import { AppShell } from "@/components/AppShell";
 import { BusinessFilter } from "@/components/BusinessFilter";
 import { OnboardingPanel } from "@/components/OnboardingPanel";
+import { ListToolbar } from "@/components/ListToolbar";
 import { StatusBadge } from "@/components/StatusBadge";
 import { currencyCop, shortDate } from "@/lib/format";
-import { getDashboardData } from "@/lib/db";
+import { getConversationsPageData } from "@/lib/db";
 import { createClient } from "@/lib/supabase/server";
 
 type ConversationsPageProps = {
-  searchParams?: Promise<{ business?: string; conversation?: string }>;
+  searchParams?: Promise<{ business?: string; conversation?: string; q?: string; page?: string }>;
 };
 
 export default async function ConversationsPage({ searchParams }: ConversationsPageProps) {
@@ -29,28 +30,24 @@ export default async function ConversationsPage({ searchParams }: ConversationsP
   if (!user) redirect("/login");
 
   const params = await searchParams;
-  const data = await getDashboardData(supabase, user.id);
-  const activeBusinessId = data.businesses.some((business) => business.id === params?.business)
-    ? params?.business
-    : undefined;
-  const conversations = data.conversations.filter(
-    (conversation) => !activeBusinessId || conversation.businessId === activeBusinessId,
-  );
-  const selectedConversation =
-    conversations.find((conversation) => conversation.id === params?.conversation) ?? conversations[0];
-  const selectedCustomer = selectedConversation
-    ? data.customers.find((customer) => customer.id === selectedConversation.customerId)
-    : undefined;
+  const data = await getConversationsPageData(supabase, user.id, {
+    businessId: params?.business,
+    conversationId: params?.conversation,
+    search: params?.q,
+    page: Number(params?.page),
+  });
+  const activeBusinessId = data.activeBusinessId;
+  const conversations = data.conversations;
+  const selectedConversation = data.selectedConversation;
+  const selectedCustomer = data.selectedCustomer;
+  const customerById = new Map(data.customers.map((customer) => [customer.id, customer]));
+  const businessById = new Map(data.businesses.map((business) => [business.id, business]));
   const selectedBusiness = selectedConversation
-    ? data.businesses.find((business) => business.id === selectedConversation.businessId)
+    ? businessById.get(selectedConversation.businessId)
     : undefined;
-  const selectedMessages = selectedConversation
-    ? data.messages.filter((message) => message.conversationId === selectedConversation.id)
-    : [];
-  const relatedAppointments = selectedCustomer
-    ? data.appointmentRequests.filter((appointment) => appointment.customerId === selectedCustomer.id)
-    : [];
-  const relatedQuotes = selectedCustomer ? data.quotes.filter((quote) => quote.customerId === selectedCustomer.id) : [];
+  const selectedMessages = data.messages;
+  const relatedAppointments = data.appointmentRequests;
+  const relatedQuotes = data.quotes;
 
   return (
     <AppShell viewerProfile={data.viewerProfile}>
@@ -64,6 +61,13 @@ export default async function ConversationsPage({ searchParams }: ConversationsP
       ) : (
         <div className="grid gap-6">
           <BusinessFilter businesses={data.businesses} activeBusinessId={activeBusinessId} basePath="/conversations" />
+          <ListToolbar
+            basePath="/conversations"
+            businessId={activeBusinessId}
+            search={params?.q}
+            page={data.page}
+            totalPages={data.totalPages}
+          />
 
           <div className="grid gap-6 xl:grid-cols-[0.85fr_1.15fr]">
             <section className="rounded-md border border-black/10 bg-white p-4">
@@ -74,9 +78,15 @@ export default async function ConversationsPage({ searchParams }: ConversationsP
 
               <div className="mt-4 grid gap-3">
                 {conversations.map((conversation) => {
-                  const customer = data.customers.find((item) => item.id === conversation.customerId);
-                  const business = data.businesses.find((item) => item.id === conversation.businessId);
-                  const href = `/conversations?business=${conversation.businessId}&conversation=${conversation.id}`;
+                  const customer = customerById.get(conversation.customerId);
+                  const business = businessById.get(conversation.businessId);
+                  const conversationParams = new URLSearchParams({
+                    business: conversation.businessId,
+                    conversation: conversation.id,
+                  });
+                  if (params?.q) conversationParams.set("q", params.q);
+                  if (data.page > 1) conversationParams.set("page", String(data.page));
+                  const href = `/conversations?${conversationParams.toString()}`;
                   const active = conversation.id === selectedConversation?.id;
 
                   return (
@@ -138,6 +148,9 @@ export default async function ConversationsPage({ searchParams }: ConversationsP
                         }`}
                       >
                         <strong>{message.role === "assistant" ? "AI" : "Cliente"}:</strong> {message.body}
+                        <span className="mt-1 block text-xs opacity-65">
+                          {new Date(message.createdAt).toLocaleString("es-CO")}
+                        </span>
                       </p>
                     ))}
                   </div>

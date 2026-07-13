@@ -1,7 +1,7 @@
 import { AppShell } from "@/components/AppShell";
 import { BusinessWorkspace } from "@/components/BusinessWorkspace";
 import { OnboardingPanel } from "@/components/OnboardingPanel";
-import { getDashboardData } from "@/lib/db";
+import { getBusinessConfigurationData } from "@/lib/db";
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 
@@ -13,7 +13,7 @@ export default async function BusinessesPage() {
 
   if (!user) redirect("/login");
 
-  const data = await getDashboardData(supabase, user.id);
+  const data = await getBusinessConfigurationData(supabase, user.id);
 
   return (
     <AppShell viewerProfile={data.viewerProfile}>
