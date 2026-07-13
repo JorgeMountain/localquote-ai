@@ -3,6 +3,7 @@
 import { Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { buildPasswordResetRedirect, normalizePasswordResetEmail } from "@/lib/auth-reset";
 import { createClient } from "@/lib/supabase/client";
 
 export function AuthForm() {
@@ -46,8 +47,8 @@ export function AuthForm() {
   }
 
   async function requestPasswordReset() {
-    const normalizedEmail = email.trim().toLowerCase();
-    if (!normalizedEmail || !normalizedEmail.includes("@")) {
+    const normalizedEmail = normalizePasswordResetEmail(email);
+    if (!normalizedEmail) {
       setMessage("Escribe tu correo para solicitar el cambio de contraseña.");
       return;
     }
@@ -56,7 +57,7 @@ export function AuthForm() {
     setMessage("");
     const supabase = createClient();
     const { error } = await supabase.auth.resetPasswordForEmail(normalizedEmail, {
-      redirectTo: `${window.location.origin}/auth/callback?next=/update-password`,
+      redirectTo: buildPasswordResetRedirect(window.location.origin),
     });
     setIsLoading(false);
     setMessage(

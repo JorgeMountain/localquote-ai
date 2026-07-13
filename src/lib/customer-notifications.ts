@@ -1,5 +1,5 @@
-import { currencyCop } from "@/lib/format";
-import { sendWhatsAppTemplate, sendWhatsAppText } from "@/lib/whatsapp";
+import { currencyCop } from "./format";
+import { sendWhatsAppTemplate, sendWhatsAppText } from "./whatsapp";
 
 type CustomerNotificationInput =
   | {

@@ -12,6 +12,17 @@ type AiClientConfig = {
 
 const clients: Partial<Record<Exclude<AiProvider, "none">, OpenAI>> = {};
 
+export type AiGenerationUsage = {
+  provider: string;
+  model: string;
+  inputTokens: number;
+  outputTokens: number;
+  estimatedCost: number;
+  latencyMs: number;
+  status: "success" | "fallback" | "failed";
+  errorMessage?: string;
+};
+
 function getAiProvider(): AiProvider {
   const configuredProvider = process.env.AI_PROVIDER?.toLowerCase();
 
@@ -98,6 +109,7 @@ export async function generateAssistantReply(input: {
 }) {
   const intent = analyzeCommercialRequest(input.userMessage, input.business).intent;
   const ai = getAiClient();
+  const startedAt = Date.now();
 
   if (ai) {
     try {
@@ -121,18 +133,80 @@ export async function generateAssistantReply(input: {
         ],
       });
 
+      const inputTokens = completion.usage?.prompt_tokens ?? 0;
+      const outputTokens = completion.usage?.completion_tokens ?? 0;
+
       return {
         intent,
         reply:
           completion.choices[0]?.message.content ??
           "Necesito confirmar esa informacion con el negocio antes de responderte.",
+        usage: {
+          provider: ai.provider,
+          model: ai.model,
+          inputTokens,
+          outputTokens,
+          estimatedCost: estimateAiCost(ai.provider, inputTokens, outputTokens),
+          latencyMs: Date.now() - startedAt,
+          status: "success" as const,
+        },
       };
     } catch (error) {
-      console.error("AI provider request failed. Using deterministic fallback.", error);
+      const errorMessage = getProviderErrorCode(error);
+      console.error("AI provider request failed. Deterministic fallback selected.", {
+        provider: ai.provider,
+        model: ai.model,
+        errorCode: errorMessage,
+      });
+      return {
+        ...generateFallbackReply(input.userMessage, input.faqs, input.links ?? [], intent),
+        usage: {
+          provider: ai.provider,
+          model: ai.model,
+          inputTokens: 0,
+          outputTokens: 0,
+          estimatedCost: 0,
+          latencyMs: Date.now() - startedAt,
+          status: "fallback" as const,
+          errorMessage,
+        },
+      };
     }
   }
 
-  return generateFallbackReply(input.userMessage, input.faqs, input.links ?? [], intent);
+  return {
+    ...generateFallbackReply(input.userMessage, input.faqs, input.links ?? [], intent),
+    usage: {
+      provider: "none",
+      model: "deterministic",
+      inputTokens: 0,
+      outputTokens: 0,
+      estimatedCost: 0,
+      latencyMs: Date.now() - startedAt,
+      status: "fallback" as const,
+    },
+  };
+}
+
+function estimateAiCost(provider: Exclude<AiProvider, "none">, inputTokens: number, outputTokens: number) {
+  const providerPrefix = provider === "deepseek" ? "DEEPSEEK" : "OPENAI";
+  const inputRate = readCostRate(`${providerPrefix}_INPUT_COST_PER_MILLION_USD`);
+  const outputRate = readCostRate(`${providerPrefix}_OUTPUT_COST_PER_MILLION_USD`);
+  const cost = (Math.max(inputTokens, 0) * inputRate + Math.max(outputTokens, 0) * outputRate) / 1_000_000;
+  return Number(cost.toFixed(8));
+}
+
+function readCostRate(name: string) {
+  const value = Number(process.env[name] ?? 0);
+  return Number.isFinite(value) && value >= 0 ? value : 0;
+}
+
+function getProviderErrorCode(error: unknown) {
+  if (error && typeof error === "object" && "status" in error) {
+    const status = Number(error.status);
+    if (Number.isInteger(status) && status >= 100 && status <= 599) return `provider_http_${status}`;
+  }
+  return "provider_request_failed";
 }
 
 function generateFallbackReply(userMessage: string, faqs: BusinessFaq[], links: BusinessLink[], intent: Conversation["lastIntent"]) {

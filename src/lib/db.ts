@@ -163,6 +163,17 @@ type PaymentReceiptRow = {
   reviewed_at: string | null;
 };
 
+type AiGenerationRow = {
+  business_id: string;
+  provider: string;
+  model: string;
+  estimated_cost: number;
+  latency_ms: number | null;
+  status: string;
+  error_message: string | null;
+  created_at: string;
+};
+
 export const pageSize = 20;
 export const dashboardPeriodOptions = [7, 30, 90] as const;
 export type DashboardPeriodDays = (typeof dashboardPeriodOptions)[number];
@@ -434,21 +445,40 @@ export async function getPaymentsPageData(
 export async function getAdminPageData(supabase: SupabaseClient, userId: string) {
   const access = await getViewerAccess(supabase, userId, true);
   if (access.viewerProfile.role !== "platform_admin" || access.businessIds.length === 0) {
-    return { ...access, customerBusinessIds: [] as string[], appointmentBusinessIds: [] as string[], quoteBusinessIds: [] as string[], conversationsCount: 0 };
+    return {
+      ...access,
+      customerBusinessIds: [] as string[],
+      appointmentBusinessIds: [] as string[],
+      quoteBusinessIds: [] as string[],
+      conversationsCount: 0,
+      aiEstimatedCost: 0,
+      aiFailureCount: 0,
+      recentAiGenerations: [] as AiGenerationRow[],
+    };
   }
-  const [customers, appointments, quotes, conversations] = await Promise.all([
+  const [customers, appointments, quotes, conversations, aiGenerations] = await Promise.all([
     supabase.from("customers").select("business_id").in("business_id", access.businessIds),
     supabase.from("appointment_requests").select("business_id").in("business_id", access.businessIds),
     supabase.from("quotes").select("business_id").in("business_id", access.businessIds),
     supabase.from("conversations").select("id", { count: "exact", head: true }).in("business_id", access.businessIds),
+    supabase
+      .from("ai_generations")
+      .select("business_id,provider,model,estimated_cost,latency_ms,status,error_message,created_at")
+      .in("business_id", access.businessIds)
+      .order("created_at", { ascending: false })
+      .limit(20),
   ]);
-  throwQueryErrors([customers, appointments, quotes, conversations]);
+  throwQueryErrors([customers, appointments, quotes, conversations, aiGenerations]);
+  const recentAiGenerations = (aiGenerations.data ?? []) as AiGenerationRow[];
   return {
     ...access,
     customerBusinessIds: (customers.data ?? []).map((row) => row.business_id),
     appointmentBusinessIds: (appointments.data ?? []).map((row) => row.business_id),
     quoteBusinessIds: (quotes.data ?? []).map((row) => row.business_id),
     conversationsCount: conversations.count ?? 0,
+    aiEstimatedCost: recentAiGenerations.reduce((sum, generation) => sum + Number(generation.estimated_cost || 0), 0),
+    aiFailureCount: recentAiGenerations.filter((generation) => Boolean(generation.error_message)).length,
+    recentAiGenerations,
   };
 }
 
@@ -476,11 +506,11 @@ async function getViewerAccess(supabase: SupabaseClient, userId: string, include
   };
 }
 
-function resolveRequestedBusinessId(businesses: Business[], requestedBusinessId?: string) {
+export function resolveRequestedBusinessId(businesses: Business[], requestedBusinessId?: string) {
   return businesses.some((business) => business.id === requestedBusinessId) ? requestedBusinessId : undefined;
 }
 
-function scopedBusinessIds(businesses: Business[], requestedBusinessId?: string) {
+export function scopedBusinessIds(businesses: Business[], requestedBusinessId?: string) {
   const activeBusinessId = resolveRequestedBusinessId(businesses, requestedBusinessId);
   const ids = activeBusinessId ? [activeBusinessId] : businesses.map((business) => business.id);
   return ids.length > 0 ? ids : [emptyBusinessId];

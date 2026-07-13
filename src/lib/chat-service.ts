@@ -5,6 +5,7 @@ import {
   getInternalChatContext,
   getOrCreateChatSession,
   persistInternalChatTurn,
+  recordInternalAiGeneration,
 } from "@/lib/chat-store";
 import { analyzeCommercialRequest, buildCommercialReply } from "@/lib/commercial";
 import { notifyBusinessOwner } from "@/lib/owner-notifications";
@@ -85,6 +86,19 @@ export async function processChatMessage(input: {
     customerPhone: input.customerPhone,
     userMessage: input.message,
   });
+  try {
+    await recordInternalAiGeneration(supabase, {
+      businessId: context.business.id,
+      conversationId: session.conversation_id,
+      ...ai.usage,
+    });
+  } catch {
+    console.error("AI generation telemetry could not be recorded.", {
+      businessId: context.business.id,
+      conversationId: session.conversation_id,
+      status: ai.usage.status,
+    });
+  }
 
   let appointment: ChatResponse["appointment"];
   let appointmentRaceLost = false;

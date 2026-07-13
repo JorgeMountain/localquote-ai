@@ -15,6 +15,7 @@ import {
   X,
   type LucideIcon,
 } from "lucide-react";
+import { isActiveAppRoute } from "@/lib/navigation";
 
 type NavigationProps = {
   isPlatformAdmin: boolean;
@@ -45,7 +46,7 @@ export function DesktopNavigation({ isPlatformAdmin }: NavigationProps) {
   return (
     <nav className="mt-10 space-y-1" aria-label="Navegacion principal">
       {getNavigationItems(isPlatformAdmin).map((item) => {
-        const active = isActiveRoute(pathname, item.href);
+        const active = isActiveAppRoute(pathname, item.href);
 
         return (
           <Link
@@ -91,7 +92,7 @@ export function MobileNavigation({ isPlatformAdmin }: NavigationProps) {
         <nav id="mobile-navigation" className="border-t border-black/10 bg-[#f8f6f1] px-4 py-3 shadow-lg" aria-label="Navegacion movil">
           <div className="mx-auto grid max-w-7xl gap-1 sm:px-2">
             {getNavigationItems(isPlatformAdmin).map((item) => {
-              const active = isActiveRoute(pathname, item.href);
+              const active = isActiveAppRoute(pathname, item.href);
 
               return (
                 <Link
@@ -113,9 +114,4 @@ export function MobileNavigation({ isPlatformAdmin }: NavigationProps) {
       )}
     </header>
   );
-}
-
-function isActiveRoute(pathname: string | null, href: string) {
-  if (href === "/") return pathname === "/";
-  return pathname === href || pathname?.startsWith(`${href}/`);
 }

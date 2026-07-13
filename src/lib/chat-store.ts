@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type {
+  AiGeneration,
   AppointmentRequest,
   Business,
   BusinessFaq,
@@ -275,6 +276,30 @@ export async function persistInternalChatTurn(
   return data as { quote_created: boolean };
 }
 
+export async function recordInternalAiGeneration(
+  supabase: SupabaseClient,
+  input: Pick<
+    AiGeneration,
+    "businessId" | "conversationId" | "provider" | "model" | "inputTokens" | "outputTokens" | "estimatedCost" | "latencyMs" | "status" | "errorMessage"
+  >,
+) {
+  const { error } = await supabase.rpc("record_internal_ai_generation", {
+    p_token: getInternalToken(),
+    p_business_id: input.businessId,
+    p_conversation_id: input.conversationId,
+    p_provider: input.provider,
+    p_model: input.model,
+    p_input_tokens: input.inputTokens ?? 0,
+    p_output_tokens: input.outputTokens ?? 0,
+    p_estimated_cost: input.estimatedCost,
+    p_latency_ms: input.latencyMs ?? 0,
+    p_status: input.status,
+    p_error_message: input.errorMessage,
+  });
+
+  if (error) throw error;
+}
+
 export async function consumeInternalRateLimit(
   supabase: SupabaseClient,
   rateKey: string,
@@ -319,4 +344,130 @@ export async function finishWhatsAppEvent(
   });
 
   if (error) throw error;
+}
+
+export type WhatsAppOutboxJob = {
+  id: string;
+  eventId: string;
+  businessId: string;
+  sourcePhoneNumberId: string;
+  customerName?: string;
+  customerPhone: string;
+  incomingMessage: string;
+  messageType: string;
+  attempts: number;
+  maxAttempts: number;
+};
+
+export type WhatsAppOutboxOutcome = {
+  status: "pending" | "processing" | "sent" | "failed";
+  retryScheduled: boolean;
+  attempts?: number;
+  maxAttempts?: number;
+};
+
+export async function enqueueWhatsAppOutbox(
+  supabase: SupabaseClient,
+  input: {
+    eventId: string;
+    businessId: string;
+    sourcePhoneNumberId: string;
+    customerName?: string;
+    customerPhone: string;
+    incomingMessage: string;
+    messageType: string;
+  },
+) {
+  const { data, error } = await supabase.rpc("enqueue_internal_whatsapp_outbox", {
+    p_token: getInternalToken(),
+    p_event_id: input.eventId,
+    p_business_id: input.businessId,
+    p_source_phone_number_id: input.sourcePhoneNumberId,
+    p_customer_name: input.customerName ?? "",
+    p_customer_phone: input.customerPhone,
+    p_incoming_message: input.incomingMessage,
+    p_message_type: input.messageType,
+  });
+
+  if (error) throw error;
+  return Boolean(data);
+}
+
+export async function claimWhatsAppOutbox(supabase: SupabaseClient): Promise<WhatsAppOutboxJob | null> {
+  const { data, error } = await supabase.rpc("claim_internal_whatsapp_outbox", {
+    p_token: getInternalToken(),
+  });
+
+  if (error) throw error;
+  return parseWhatsAppOutboxJob(data);
+}
+
+export async function finishWhatsAppOutbox(
+  supabase: SupabaseClient,
+  input: {
+    outboxId: string;
+    succeeded: boolean;
+    providerMessageId?: string;
+    errorCode?: string;
+  },
+): Promise<WhatsAppOutboxOutcome> {
+  const { data, error } = await supabase.rpc("finish_internal_whatsapp_outbox", {
+    p_token: getInternalToken(),
+    p_outbox_id: input.outboxId,
+    p_succeeded: input.succeeded,
+    p_provider_message_id: input.providerMessageId,
+    p_error_code: input.errorCode,
+  });
+
+  if (error) throw error;
+  return parseWhatsAppOutboxOutcome(data);
+}
+
+function parseWhatsAppOutboxJob(value: unknown): WhatsAppOutboxJob | null {
+  if (!value || typeof value !== "object") return null;
+  const job = value as Record<string, unknown>;
+  if (
+    typeof job.id !== "string"
+    || typeof job.event_id !== "string"
+    || typeof job.business_id !== "string"
+    || typeof job.source_phone_number_id !== "string"
+    || typeof job.customer_phone !== "string"
+    || typeof job.incoming_message !== "string"
+    || typeof job.message_type !== "string"
+    || typeof job.attempts !== "number"
+    || typeof job.max_attempts !== "number"
+  ) {
+    throw new Error("Invalid WhatsApp outbox job.");
+  }
+
+  return {
+    id: job.id,
+    eventId: job.event_id,
+    businessId: job.business_id,
+    sourcePhoneNumberId: job.source_phone_number_id,
+    customerName: typeof job.customer_name === "string" ? job.customer_name : undefined,
+    customerPhone: job.customer_phone,
+    incomingMessage: job.incoming_message,
+    messageType: job.message_type,
+    attempts: job.attempts,
+    maxAttempts: job.max_attempts,
+  };
+}
+
+function parseWhatsAppOutboxOutcome(value: unknown): WhatsAppOutboxOutcome {
+  if (!value || typeof value !== "object") throw new Error("Invalid WhatsApp outbox outcome.");
+  const outcome = value as Record<string, unknown>;
+  if (
+    (outcome.status !== "pending" && outcome.status !== "processing" && outcome.status !== "sent" && outcome.status !== "failed")
+    || typeof outcome.retry_scheduled !== "boolean"
+  ) {
+    throw new Error("Invalid WhatsApp outbox outcome.");
+  }
+
+  return {
+    status: outcome.status,
+    retryScheduled: outcome.retry_scheduled,
+    attempts: typeof outcome.attempts === "number" ? outcome.attempts : undefined,
+    maxAttempts: typeof outcome.max_attempts === "number" ? outcome.max_attempts : undefined,
+  };
 }

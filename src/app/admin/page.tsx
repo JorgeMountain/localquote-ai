@@ -3,8 +3,9 @@ import Link from "next/link";
 import { AppShell } from "@/components/AppShell";
 import { MetricCard } from "@/components/MetricCard";
 import { getAdminPageData } from "@/lib/db";
+import { currencyUsd, shortDate } from "@/lib/format";
 import { createClient } from "@/lib/supabase/server";
-import { BriefcaseBusiness, MessageSquareText, ShieldCheck, UsersRound } from "lucide-react";
+import { Bot, BriefcaseBusiness, MessageSquareText, ShieldCheck, UsersRound } from "lucide-react";
 
 export default async function AdminPage() {
   const supabase = await createClient();
@@ -38,6 +39,53 @@ export default async function AdminPage() {
         <MetricCard label="Dueños negocio" value={String(ownerProfiles.length)} detail="Usuarios tipo cliente." icon={UsersRound} />
         <MetricCard label="Conversaciones" value={String(data.conversationsCount)} detail="Web y WhatsApp." icon={MessageSquareText} />
         <MetricCard label="Admins" value={String(data.profiles.length - ownerProfiles.length)} detail="Usuarios plataforma." icon={ShieldCheck} />
+        <MetricCard label="Costo IA reciente" value={currencyUsd(data.aiEstimatedCost)} detail="Ultimas 20 generaciones registradas." icon={Bot} />
+        <MetricCard label="Alertas IA" value={String(data.aiFailureCount)} detail="Fallbacks por errores del proveedor." icon={ShieldCheck} />
+      </section>
+
+      <section className="mt-6 rounded-xl border border-black/10 bg-white p-5 shadow-sm">
+        <div>
+          <h2 className="text-2xl font-semibold">Consumo y errores de IA</h2>
+          <p className="mt-1 text-sm text-[#706d62]">
+            Se registran proveedor, modelo, tokens, costo estimado y latencia. No se guardan prompts, respuestas ni llaves.
+          </p>
+        </div>
+        <div className="mt-4 overflow-x-auto">
+          <table className="w-full min-w-[760px] text-left text-sm">
+            <thead className="border-b border-black/10 text-xs uppercase tracking-[0.14em] text-[#706d62]">
+              <tr>
+                <th className="py-3 pr-4">Fecha</th>
+                <th className="py-3 pr-4">Proveedor / modelo</th>
+                <th className="py-3 pr-4">Costo</th>
+                <th className="py-3 pr-4">Latencia</th>
+                <th className="py-3">Estado</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.recentAiGenerations.map((generation) => (
+                <tr key={`${generation.business_id}-${generation.created_at}-${generation.model}`} className="border-b border-black/5 align-top">
+                  <td className="py-3 pr-4 text-[#706d62]">{shortDate(generation.created_at)}</td>
+                  <td className="py-3 pr-4">
+                    <p className="font-semibold">{generation.provider}</p>
+                    <p className="text-xs text-[#706d62]">{generation.model}</p>
+                  </td>
+                  <td className="py-3 pr-4">{currencyUsd(Number(generation.estimated_cost || 0))}</td>
+                  <td className="py-3 pr-4">{generation.latency_ms ?? 0} ms</td>
+                  <td className="py-3">
+                    <p className={generation.error_message ? "font-semibold text-red-700" : "font-semibold text-[#4d6419]"}>
+                      {generation.error_message ?? generation.status}
+                    </p>
+                  </td>
+                </tr>
+              ))}
+              {data.recentAiGenerations.length === 0 && (
+                <tr>
+                  <td className="py-5 text-[#706d62]" colSpan={5}>Aun no hay generaciones registradas.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </section>
 
       <section className="mt-6 rounded-xl border border-black/10 bg-white p-5 shadow-sm">

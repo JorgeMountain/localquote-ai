@@ -1,9 +1,8 @@
 import { NextResponse } from "next/server";
 import { processChatMessage } from "@/lib/chat-service";
+import { parseChatRequestBody } from "@/lib/chat-request";
 import { consumeInternalRateLimit } from "@/lib/chat-store";
 import { createAnonRouteClient } from "@/lib/supabase/route";
-import type { ChatRequest } from "@/lib/types";
-import { isUuid } from "@/lib/validation";
 
 const maxRequestBytes = 32 * 1024;
 const maxMessageLength = 2000;
@@ -19,30 +18,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "La solicitud es demasiado grande." }, { status: 413 });
   }
 
-  let payload: ChatRequest;
-  try {
-    payload = JSON.parse(rawBody) as ChatRequest;
-  } catch {
-    return NextResponse.json({ error: "JSON invalido." }, { status: 400 });
-  }
-
-  const slug = payload.slug?.trim();
-  const message = payload.message?.trim();
-  if (!slug || !message) {
-    return NextResponse.json({ error: "slug and message are required" }, { status: 400 });
-  }
-  if (slug.length > 64) {
-    return NextResponse.json({ error: "Slug invalido." }, { status: 400 });
-  }
-  if (message.length > maxMessageLength) {
-    return NextResponse.json({ error: "El mensaje no puede superar 2000 caracteres." }, { status: 400 });
-  }
-  if (
-    (payload.customerId && !isUuid(payload.customerId))
-    || (payload.conversationId && !isUuid(payload.conversationId))
-  ) {
-    return NextResponse.json({ error: "Sesion de chat invalida." }, { status: 400 });
-  }
+  const parsed = parseChatRequestBody(rawBody, maxMessageLength);
+  if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 });
+  const { payload } = parsed;
+  const { slug, message } = payload;
 
   try {
     const forwardedFor = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();

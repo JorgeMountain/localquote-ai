@@ -726,6 +726,10 @@ export type Database = {
         Args: { p_business_id: string; p_event_id: string; p_token: string }
         Returns: boolean
       }
+      claim_internal_whatsapp_outbox: {
+        Args: { p_token: string }
+        Returns: Json
+      }
       consume_internal_rate_limit: {
         Args: {
           p_max_requests: number
@@ -748,9 +752,32 @@ export type Database = {
         }
         Returns: boolean
       }
+      enqueue_internal_whatsapp_outbox: {
+        Args: {
+          p_business_id: string
+          p_customer_name: string
+          p_customer_phone: string
+          p_event_id: string
+          p_incoming_message: string
+          p_message_type: string
+          p_source_phone_number_id: string
+          p_token: string
+        }
+        Returns: boolean
+      }
       finish_internal_whatsapp_event: {
         Args: { p_event_id: string; p_succeeded: boolean; p_token: string }
         Returns: undefined
+      }
+      finish_internal_whatsapp_outbox: {
+        Args: {
+          p_error_code?: string
+          p_outbox_id: string
+          p_provider_message_id?: string
+          p_succeeded: boolean
+          p_token: string
+        }
+        Returns: Json
       }
       get_chat_context: {
         Args: { p_phone_number_id?: string; p_slug?: string; p_token: string }

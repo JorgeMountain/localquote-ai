@@ -3,11 +3,9 @@
 import { FileUp, Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { getPaymentReceiptExtension, validatePaymentReceiptFile } from "@/lib/payment-receipt";
 import { createClient } from "@/lib/supabase/client";
 import type { Business } from "@/lib/types";
-
-const allowedTypes = new Set(["image/jpeg", "image/png", "image/webp", "application/pdf"]);
-const maxFileSize = 5 * 1024 * 1024;
 
 export function PaymentReceiptUploader({
   businesses,
@@ -30,18 +28,9 @@ export function PaymentReceiptUploader({
     const businessId = String(formData.get("business_id") ?? "");
     const file = formData.get("receipt");
 
-    if (!(file instanceof File) || file.size === 0) {
-      setMessage("Selecciona una foto o PDF del comprobante.");
-      setIsUploading(false);
-      return;
-    }
-    if (!allowedTypes.has(file.type)) {
-      setMessage("Formato no permitido. Usa JPG, PNG, WEBP o PDF.");
-      setIsUploading(false);
-      return;
-    }
-    if (file.size > maxFileSize) {
-      setMessage("El archivo no puede superar 5 MB.");
+    const fileError = validatePaymentReceiptFile(file instanceof File ? file : null);
+    if (fileError || !(file instanceof File)) {
+      setMessage(fileError ?? "Selecciona una foto o PDF del comprobante.");
       setIsUploading(false);
       return;
     }
@@ -58,7 +47,7 @@ export function PaymentReceiptUploader({
       return;
     }
 
-    const extension = file.name.split(".").pop()?.toLowerCase().replace(/[^a-z0-9]/g, "") || "bin";
+    const extension = getPaymentReceiptExtension(file.name);
     const objectPath = `${businessId}/${crypto.randomUUID()}.${extension}`;
     const { error: uploadError } = await supabase.storage
       .from("payment-receipts")

@@ -1,14 +1,15 @@
-import { NextResponse } from "next/server";
-import { processChatMessage } from "@/lib/chat-service";
+import { after, NextResponse } from "next/server";
 import {
   claimWhatsAppEvent,
   consumeInternalRateLimit,
+  enqueueWhatsAppOutbox,
   finishWhatsAppEvent,
   getInternalChatContext,
 } from "@/lib/chat-store";
 import { createAnonRouteClient } from "@/lib/supabase/route";
 import { hasWhatsAppWebhookSecret, verifyMetaWebhookSignature } from "@/lib/webhook-security";
-import { sendWhatsAppText } from "@/lib/whatsapp";
+import { processWhatsAppOutboxBatch } from "@/lib/whatsapp-outbox";
+import { getWebhookQueueAcknowledgement, normalizeInboundWhatsAppMessage } from "@/lib/whatsapp-webhook";
 import { isPhone } from "@/lib/validation";
 
 export const runtime = "nodejs";
@@ -84,6 +85,7 @@ export async function POST(request: Request) {
   ) {
     return NextResponse.json({ error: "Invalid WhatsApp message metadata" }, { status: 400 });
   }
+
   const supabase = createAnonRouteClient();
   let claimed = false;
 
@@ -100,7 +102,7 @@ export async function POST(request: Request) {
 
     const allowed = await consumeInternalRateLimit(
       supabase,
-      `whatsapp:${context.business.id}:${message.from.slice(0, 32)}`,
+      "whatsapp:" + context.business.id + ":" + message.from.slice(0, 32),
       30,
       60,
     );
@@ -109,55 +111,37 @@ export async function POST(request: Request) {
     claimed = await claimWhatsAppEvent(supabase, message.id, context.business.id);
     if (!claimed) return NextResponse.json({ ok: true, duplicate: true });
 
-    const text = message.text?.body?.trim();
-    if (!text || message.type !== "text") {
-      await sendWhatsAppText(
-        message.from,
-        "Por ahora solo puedo responder mensajes de texto.",
-        context.business.whatsappPhoneNumberId ?? phoneNumberId,
-      );
-      await finishWhatsAppEvent(supabase, message.id, true);
-      return NextResponse.json({ ok: true });
-    }
-    if (text.length > 2000) {
-      await sendWhatsAppText(
-        message.from,
-        "El mensaje es demasiado largo. Envíalo nuevamente en menos de 2000 caracteres.",
-        context.business.whatsappPhoneNumberId ?? phoneNumberId,
-      );
-      await finishWhatsAppEvent(supabase, message.id, true);
-      return NextResponse.json({ ok: true });
-    }
-
-    const response = await processChatMessage({
-      channel: "whatsapp",
-      phoneNumberId,
-      slug: process.env.WHATSAPP_DEFAULT_BUSINESS_SLUG,
+    const normalizedMessage = normalizeInboundWhatsAppMessage(message.type, message.text?.body);
+    const queued = await enqueueWhatsAppOutbox(supabase, {
+      eventId: message.id,
+      businessId: context.business.id,
+      sourcePhoneNumberId: context.business.whatsappPhoneNumberId ?? phoneNumberId,
       customerName: contact?.profile?.name,
-      customerPhone: contact?.wa_id || message.from,
-      message: text,
+      customerPhone: message.from,
+      incomingMessage: normalizedMessage.incomingMessage,
+      messageType: normalizedMessage.messageType,
+    });
+    if (!queued) return NextResponse.json(getWebhookQueueAcknowledgement(false));
+
+    after(async () => {
+      try {
+        await processWhatsAppOutboxBatch(1);
+      } catch {
+        console.error("WhatsApp outbox background worker failed.", { eventId: message.id });
+      }
     });
 
-    if (!response) throw new Error("Business not found");
-
-    await sendWhatsAppText(
-      message.from,
-      response.reply,
-      response.responsePhoneNumberId ?? phoneNumberId,
-    );
-    await finishWhatsAppEvent(supabase, message.id, true);
-    return NextResponse.json({ ok: true });
-  } catch (error) {
+    return NextResponse.json(getWebhookQueueAcknowledgement(true));
+  } catch {
     if (claimed) {
       try {
         await finishWhatsAppEvent(supabase, message.id, false);
-      } catch (finishError) {
-        console.error("Failed to mark WhatsApp event as failed.", finishError);
+      } catch {
+        console.error("Failed to mark WhatsApp event as failed.", { eventId: message.id });
       }
     }
-    console.error("WhatsApp webhook processing failed.", error);
-    const errorMessage = error instanceof Error ? error.message : "Webhook processing failed";
-    return NextResponse.json({ ok: false, error: errorMessage }, { status: 500 });
+    console.error("WhatsApp webhook enqueue failed.", { eventId: message.id, phoneNumberId });
+    return NextResponse.json({ ok: false, error: "Webhook processing failed" }, { status: 500 });
   }
 }
 
