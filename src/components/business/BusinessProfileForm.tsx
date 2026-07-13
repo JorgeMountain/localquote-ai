@@ -21,13 +21,27 @@ export function BusinessProfileForm({ business }: { business: Business }) {
       <div className="mt-5 grid gap-4 md:grid-cols-2">
         <Field name="name" label="Nombre visible" defaultValue={business.name} maxLength={120} required />
         <Field name="phone" label="Telefono o WhatsApp" defaultValue={business.phone} maxLength={32} required />
-        <Field name="whatsapp_phone_number_id" label="WhatsApp Phone Number ID" defaultValue={business.whatsappPhoneNumberId ?? ""} maxLength={32} hint="Opcional. Identifica el numero emisor de este negocio en Meta." />
         <Field name="location" label="Direccion o zona de cobertura" defaultValue={business.location} maxLength={500} required />
         <Field name="hours" label="Horarios generales" defaultValue={business.hours} maxLength={2000} textarea required />
         <Field name="description" label="Que hace el negocio" defaultValue={business.description} maxLength={2000} textarea required />
         <Field name="services" label="Texto heredado de servicios" defaultValue={business.services.join("\n")} maxLength={8000} textarea hint="Respaldo temporal. Los precios se gestionan en Servicios y precios." />
         <BotRulesEditor rules={business.rules} />
       </div>
+      <details className="mt-5 rounded-lg border border-black/10 bg-[#f8f6f1] p-4">
+        <summary className="cursor-pointer text-sm font-semibold">Opciones tecnicas de WhatsApp</summary>
+        <p className="mt-2 text-sm leading-6 text-[#706d62]">
+          Solo necesitas esto cuando conectes un numero de Meta. El identificador le dice a Tactio desde que linea llegaron los mensajes.
+        </p>
+        <div className="mt-4 max-w-xl">
+          <Field
+            name="whatsapp_phone_number_id"
+            label="Identificador del numero de WhatsApp (opcional)"
+            defaultValue={business.whatsappPhoneNumberId ?? ""}
+            maxLength={32}
+            hint="Copialo desde Meta cuando tengas el numero conectado. No es el telefono visible para tus clientes."
+          />
+        </div>
+      </details>
     </form>
   );
 }

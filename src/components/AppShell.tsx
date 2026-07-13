@@ -1,34 +1,17 @@
 import Link from "next/link";
 import {
   Bot,
-  BriefcaseBusiness,
-  CalendarClock,
-  FileText,
-  Inbox,
-  LayoutDashboard,
   MessageCircle,
-  ReceiptText,
-  ShieldCheck,
 } from "lucide-react";
+import { DesktopNavigation, MobileNavigation } from "@/components/AppNavigation";
 import type { Profile } from "@/lib/types";
 
-const navItems = [
-  { href: "/", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/businesses", label: "Configurar bot", icon: BriefcaseBusiness },
-  { href: "/conversations", label: "Conversaciones", icon: Inbox },
-  { href: "/appointments", label: "Citas", icon: CalendarClock },
-  { href: "/quotes", label: "Cotizaciones", icon: FileText },
-  { href: "/payments", label: "Pagos", icon: ReceiptText },
-];
-
 export function AppShell({ children, viewerProfile }: { children: React.ReactNode; viewerProfile?: Profile }) {
-  const visibleNavItems =
-    viewerProfile?.role === "platform_admin"
-      ? [...navItems, { href: "/admin", label: "Admin", icon: ShieldCheck }]
-      : navItems;
+  const isPlatformAdmin = viewerProfile?.role === "platform_admin";
 
   return (
     <div className="min-h-screen bg-[var(--background)] text-[var(--foreground)]">
+      <MobileNavigation isPlatformAdmin={isPlatformAdmin} />
       <aside className="fixed inset-y-0 left-0 hidden w-72 border-r border-black/10 bg-[#f8f6f1] px-5 py-6 lg:block">
         <Link href="/" className="flex items-center gap-3">
           <span className="flex size-10 items-center justify-center rounded-md bg-[#111111] text-white">
@@ -42,18 +25,7 @@ export function AppShell({ children, viewerProfile }: { children: React.ReactNod
           </span>
         </Link>
 
-        <nav className="mt-10 space-y-1">
-          {visibleNavItems.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-[#3b392f] transition hover:bg-black hover:text-white"
-            >
-              <item.icon size={17} />
-              {item.label}
-            </Link>
-          ))}
-        </nav>
+        <DesktopNavigation isPlatformAdmin={isPlatformAdmin} />
 
         <div className="absolute bottom-6 left-5 right-5 rounded-md border border-black/10 bg-white p-4">
           <div className="flex items-center gap-2 text-sm font-semibold">

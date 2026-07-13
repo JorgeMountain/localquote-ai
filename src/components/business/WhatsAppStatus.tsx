@@ -29,13 +29,18 @@ export function WhatsAppStatus({
       <div className={`mt-4 rounded-lg border px-3 py-2 text-sm font-semibold ${isConnected ? "border-[#93b35d]/40 bg-[#eef7d2] text-[#3f551c]" : "border-amber-200 bg-amber-50 text-amber-800"}`}>
         {isConnected ? "Este negocio esta conectado a WhatsApp." : "Este negocio aun no tiene un numero de WhatsApp asociado."}
       </div>
-      <dl className="mt-4 grid gap-3 text-sm">
-        <StatusValue label="Slug de este negocio" value={business.slug} />
-        <StatusValue label="Phone Number ID" value={business.whatsappPhoneNumberId || "sin configurar"} />
-        <StatusValue label="Slug activo en WhatsApp" value={whatsappBusinessSlug || "sin configurar"} />
-      </dl>
-      <div className="mt-4 border-t border-black/10 pt-4">
-        <p className="text-sm font-semibold">Configuracion segura del servidor</p>
+      <p className="mt-3 text-sm leading-6 text-[#706d62]">
+        El identificador del numero conecta los mensajes entrantes de Meta con este negocio. No es el numero que ven tus clientes.
+      </p>
+      <details className="mt-4 rounded-lg border border-black/10 bg-[#f8f6f1] p-4">
+        <summary className="cursor-pointer text-sm font-semibold">Ver detalles tecnicos de la conexion</summary>
+        <dl className="mt-4 grid gap-3 text-sm">
+          <StatusValue label="Slug de este negocio" value={business.slug} />
+          <StatusValue label="Identificador del numero conectado" value={business.whatsappPhoneNumberId || "sin configurar"} />
+          <StatusValue label="Slug global de respaldo" value={whatsappBusinessSlug || "sin configurar"} />
+        </dl>
+        <div className="mt-4 border-t border-black/10 pt-4">
+          <p className="text-sm font-semibold">Configuracion segura del servidor</p>
         <div className="mt-3 grid gap-2">
           <EnvironmentCheck label="App Secret de Meta" configured={environmentStatus.appSecret} required />
           <EnvironmentCheck label="Access Token" configured={environmentStatus.accessToken} required />
@@ -54,10 +59,11 @@ export function WhatsAppStatus({
             Configura plantillas aprobadas para notificar fuera de la ventana de 24 horas de WhatsApp.
           </p>
         )}
-      </div>
+        </div>
+      </details>
       {!isConnected && (
         <p className="mt-3 text-sm leading-6 text-[#706d62]">
-          Agrega el Phone Number ID de Meta. El slug global queda solo como respaldo para pruebas antiguas.
+          Cuando tengas Meta listo, pega el identificador del numero en la pestaÃ±a Negocio. El slug global queda solo como respaldo para pruebas antiguas.
         </p>
       )}
     </section>

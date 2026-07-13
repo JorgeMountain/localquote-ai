@@ -38,6 +38,8 @@ import type {
   Profile,
 } from "@/lib/types";
 
+type SetupStepId = "business" | "services" | "knowledge" | "schedule" | "links" | "whatsapp" | "test";
+
 export function BusinessWorkspace({
   businesses,
   profiles,
@@ -62,6 +64,7 @@ export function BusinessWorkspace({
   whatsappEnvironmentStatus: WhatsAppEnvironmentStatus;
 }) {
   const [selectedId, setSelectedId] = useState(businesses[0]?.id ?? "");
+  const [activeStep, setActiveStep] = useState<SetupStepId>("business");
   const selectedBusiness = businesses.find((business) => business.id === selectedId) ?? businesses[0];
   const businessFaqs = useMemo(
     () => (selectedBusiness ? faqs.filter((faq) => faq.businessId === selectedBusiness.id) : []),
@@ -83,7 +86,19 @@ export function BusinessWorkspace({
     () => (selectedBusiness ? businessLinks.filter((link) => link.businessId === selectedBusiness.id) : []),
     [businessLinks, selectedBusiness],
   );
-  const completion = selectedBusiness ? getCompletion(selectedBusiness, businessFaqs.length) : [];
+  const completion = selectedBusiness
+    ? getCompletion(selectedBusiness, businessFaqs.length, selectedBusinessServices.filter((service) => service.isActive).length)
+    : [];
+  const setupSteps = selectedBusiness
+    ? getSetupSteps({
+        business: selectedBusiness,
+        completion,
+        hasSchedule: selectedBusinessHours.length > 0 || selectedAvailabilitySlots.length > 0,
+        hasLinks: selectedBusinessLinks.some((link) => link.isActive),
+      })
+    : [];
+  const essentialCompleted = completion.filter((item) => item.done).length;
+  const completionPercent = completion.length > 0 ? Math.round((essentialCompleted / completion.length) * 100) : 0;
 
   return (
     <div className="grid gap-6">
@@ -106,7 +121,10 @@ export function BusinessWorkspace({
                 <select
                   className="h-12 rounded-lg border border-black/15 bg-[#f8f6f1] px-3 text-sm font-semibold outline-none focus:border-black sm:min-w-80"
                   value={selectedBusiness?.id ?? ""}
-                  onChange={(event) => setSelectedId(event.target.value)}
+                  onChange={(event) => {
+                    setSelectedId(event.target.value);
+                    setActiveStep("business");
+                  }}
                 >
                   {businesses.map((business) => (
                     <option key={business.id} value={business.id}>
@@ -129,88 +147,154 @@ export function BusinessWorkspace({
           <CreateBusinessForm variant="compact" profiles={profiles} viewerProfile={viewerProfile} />
 
           {selectedBusiness && (
-            <div className="grid gap-6 xl:grid-cols-[0.82fr_1.18fr]">
-              <aside className="grid content-start gap-4">
-                <CompletionCard completion={completion} business={selectedBusiness} faqCount={businessFaqs.length} />
-                <WhatsAppStatus
-                  business={selectedBusiness}
-                  whatsappBusinessSlug={whatsappBusinessSlug}
-                  environmentStatus={whatsappEnvironmentStatus}
-                />
-                <BotInstructionCard />
-                <DangerZone business={selectedBusiness} />
-              </aside>
-
-              <div className="grid gap-6">
-                <BusinessProfileForm business={selectedBusiness} />
-
-                <section className="rounded-xl border border-black/10 bg-white p-5 shadow-sm">
-                  <FormHeader
-                    icon={Sparkles}
-                    eyebrow="Paso 2"
-                    title="Servicios y precios"
-                    description="Estos datos estructurados son la fuente de precios del bot. Si un precio no esta configurado, la IA no lo inventa."
-                  />
-                  <ServicesEditor businessId={selectedBusiness.id} services={selectedBusinessServices} />
-                </section>
-
-                <section className="rounded-xl border border-black/10 bg-white p-5 shadow-sm">
-                  <FormHeader
-                    icon={Link2}
-                    eyebrow="Opcional"
-                    title="Enlaces y redirecciones"
-                    description="Agrega links aprobados para catalogos, pagos, reservas, ubicacion o soporte. El bot solo debe enviar enlaces que esten aqui."
-                  />
-
-                  <BusinessLinksEditor businessId={selectedBusiness.id} links={selectedBusinessLinks} />
-                </section>
-
-                <section className="rounded-xl border border-black/10 bg-white p-5 shadow-sm">
-                  <FormHeader
-                    icon={Clock3}
-                    eyebrow="Opcional"
-                    title="Agenda y disponibilidad avanzada"
-                    description="Usa esto solo si el negocio trabaja con horarios definidos. Si no lo configuras, el bot deja las citas como solicitudes pendientes."
-                  />
-                  <ScheduleEditor
-                    business={selectedBusiness}
-                    businessHours={selectedBusinessHours}
-                    availabilitySlots={selectedAvailabilitySlots}
-                  />
-                </section>
-
-                <section className="rounded-xl border border-black/10 bg-white p-5 shadow-sm">
-                  <FormHeader
-                    icon={HelpCircle}
-                    eyebrow="Paso 3"
-                    title="Preguntas frecuentes"
-                    description="Agrega respuestas aprobadas. El bot las usa como fuente principal antes de improvisar."
-                  />
-
-                  <FaqEditor businessId={selectedBusiness.id} faqs={businessFaqs} />
-                </section>
-
-                <section className="rounded-xl border border-black/10 bg-[#111111] p-5 text-white shadow-sm">
-                  <FormHeader
-                    icon={Sparkles}
-                    eyebrow="Paso 3"
-                    title="Prueba el asistente"
-                    description="Cuando termines la configuracion, prueba la pagina publica o escribe al WhatsApp conectado."
-                    dark
-                  />
-                  <div className="mt-5 grid gap-3 md:grid-cols-2">
-                    <Link
-                      href={`/b/${selectedBusiness.slug}`}
-                      className="inline-flex h-12 items-center justify-center rounded-lg bg-[#e2f26b] px-4 text-sm font-semibold text-black"
-                    >
-                      Abrir chat web de prueba
-                    </Link>
-                    <div className="rounded-lg border border-white/10 bg-white/5 p-4 text-sm leading-6 text-white/70">
-                      WhatsApp identifica el negocio por su Phone Number ID. El slug global se usa solo como respaldo.
-                    </div>
+            <div className="grid gap-6">
+              <section className="rounded-xl border border-black/10 bg-white p-5 shadow-sm">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                  <div>
+                    <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#706d62]">Configuracion guiada</p>
+                    <h2 className="mt-1 text-2xl font-semibold">Prepara el asistente de {selectedBusiness.name}</h2>
+                    <p className="mt-2 max-w-3xl text-sm leading-6 text-[#706d62]">
+                      Completa lo esencial primero. La agenda, los enlaces y WhatsApp se activan solo si este negocio los necesita.
+                    </p>
                   </div>
-                </section>
+                  <div className="min-w-52 rounded-lg bg-[#f8f6f1] p-4">
+                    <div className="flex items-center justify-between gap-3 text-sm font-semibold">
+                      <span>Listo para responder</span>
+                      <span>{completionPercent}%</span>
+                    </div>
+                    <div className="mt-3 h-2 overflow-hidden rounded-full bg-black/10">
+                      <div className="h-full rounded-full bg-[#6d8a2f]" style={{ width: `${completionPercent}%` }} />
+                    </div>
+                    <p className="mt-2 text-xs leading-5 text-[#706d62]">
+                      {essentialCompleted}/{completion.length} elementos esenciales listos.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-6 grid gap-2 sm:grid-cols-2 xl:grid-cols-4" role="tablist" aria-label="Pasos de configuracion">
+                  {setupSteps.map((step, index) => {
+                    const active = activeStep === step.id;
+
+                    return (
+                      <button
+                        key={step.id}
+                        type="button"
+                        role="tab"
+                        aria-selected={active}
+                        onClick={() => setActiveStep(step.id)}
+                        className={`flex items-center gap-3 rounded-lg border px-3 py-3 text-left text-sm transition ${
+                          active ? "border-black bg-black text-white" : "border-black/10 bg-[#f8f6f1] hover:border-black/35"
+                        }`}
+                      >
+                        <span className={`flex size-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${
+                          active ? "bg-[#e2f26b] text-black" : step.done ? "bg-[#dfecc2] text-[#4d6419]" : "bg-white text-[#706d62]"
+                        }`}>
+                          {step.done ? <CheckCircle2 size={15} /> : index + 1}
+                        </span>
+                        <span>
+                          <span className="block font-semibold">{step.label}</span>
+                          {step.optional && <span className={`block text-xs ${active ? "text-white/65" : "text-[#706d62]"}`}>Opcional</span>}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </section>
+
+              <div role="tabpanel">
+                {activeStep === "business" && <BusinessProfileForm business={selectedBusiness} />}
+
+                {activeStep === "services" && (
+                  <section className="rounded-xl border border-black/10 bg-white p-5 shadow-sm">
+                    <FormHeader
+                      icon={Sparkles}
+                      eyebrow="Paso 2"
+                      title="Servicios y precios"
+                      description="Estos datos estructurados son la fuente de precios del bot. Si un precio no esta configurado, la IA no lo inventa."
+                    />
+                    <ServicesEditor businessId={selectedBusiness.id} services={selectedBusinessServices} />
+                  </section>
+                )}
+
+                {activeStep === "knowledge" && (
+                  <section className="rounded-xl border border-black/10 bg-white p-5 shadow-sm">
+                    <FormHeader
+                      icon={HelpCircle}
+                      eyebrow="Paso 3"
+                      title="Conocimiento y preguntas frecuentes"
+                      description="Agrega respuestas aprobadas. El bot las usa como fuente principal antes de improvisar."
+                    />
+                    <FaqEditor businessId={selectedBusiness.id} faqs={businessFaqs} />
+                  </section>
+                )}
+
+                {activeStep === "schedule" && (
+                  <section className="rounded-xl border border-black/10 bg-white p-5 shadow-sm">
+                    <FormHeader
+                      icon={Clock3}
+                      eyebrow="Opcional"
+                      title="Agenda y disponibilidad"
+                      description="Activalo solo si este negocio trabaja con horarios definidos. Si lo dejas vacio, el bot toma solicitudes pendientes para que el negocio las revise."
+                    />
+                    <ScheduleEditor
+                      business={selectedBusiness}
+                      businessHours={selectedBusinessHours}
+                      availabilitySlots={selectedAvailabilitySlots}
+                    />
+                  </section>
+                )}
+
+                {activeStep === "links" && (
+                  <section className="rounded-xl border border-black/10 bg-white p-5 shadow-sm">
+                    <FormHeader
+                      icon={Link2}
+                      eyebrow="Opcional"
+                      title="Enlaces y redirecciones"
+                      description="Agrega links aprobados para catalogos, pagos, reservas, ubicacion o soporte. El bot solo debe enviar enlaces que esten aqui."
+                    />
+                    <BusinessLinksEditor businessId={selectedBusiness.id} links={selectedBusinessLinks} />
+                  </section>
+                )}
+
+                {activeStep === "whatsapp" && (
+                  <WhatsAppStatus
+                    business={selectedBusiness}
+                    whatsappBusinessSlug={whatsappBusinessSlug}
+                    environmentStatus={whatsappEnvironmentStatus}
+                  />
+                )}
+
+                {activeStep === "test" && (
+                  <section className="rounded-xl border border-black/10 bg-[#111111] p-5 text-white shadow-sm">
+                    <FormHeader
+                      icon={Sparkles}
+                      eyebrow="Paso final"
+                      title="Prueba el asistente"
+                      description="Prueba la pagina publica antes de conectar clientes reales. WhatsApp es opcional y usa el numero conectado en Meta."
+                      dark
+                    />
+                    <div className="mt-5 grid gap-3 md:grid-cols-2">
+                      <Link
+                        href={`/b/${selectedBusiness.slug}`}
+                        className="inline-flex h-12 items-center justify-center rounded-lg bg-[#e2f26b] px-4 text-sm font-semibold text-black"
+                      >
+                        Abrir chat web de prueba
+                      </Link>
+                      <div className="rounded-lg border border-white/10 bg-white/5 p-4 text-sm leading-6 text-white/70">
+                        El chat web funciona sin pedir nombre ni telefono. El bot los solicita solo cuando hacen falta para una cita o seguimiento.
+                      </div>
+                    </div>
+                  </section>
+                )}
               </div>
+
+              <details className="rounded-xl border border-black/10 bg-[#f8f6f1] p-5">
+                <summary className="cursor-pointer text-sm font-semibold">Reglas avanzadas y zona de administracion</summary>
+                <div className="mt-5 grid gap-4 xl:grid-cols-[1fr_0.9fr]">
+                  <BotInstructionCard />
+                  <DangerZone business={selectedBusiness} />
+                </div>
+              </details>
             </div>
           )}
         </>
@@ -294,38 +378,6 @@ function ManualSetupGuide() {
     </section>
   );
 }
-
-function CompletionCard({
-  completion,
-  business,
-  faqCount,
-}: {
-  completion: { label: string; done: boolean }[];
-  business: Business;
-  faqCount: number;
-}) {
-  const completed = completion.filter((item) => item.done).length;
-
-  return (
-    <section className="rounded-xl border border-black/10 bg-white p-5 shadow-sm">
-      <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#706d62]">Checklist</p>
-      <h2 className="mt-2 text-2xl font-semibold">{business.name}</h2>
-      <p className="mt-1 text-sm text-[#706d62]">
-        {completed}/{completion.length} partes listas. FAQs creadas: {faqCount}.
-      </p>
-      <div className="mt-5 grid gap-2">
-        {completion.map((item) => (
-          <div key={item.label} className="flex items-center gap-3 rounded-lg border border-black/10 bg-[#f8f6f1] px-3 py-2">
-            <CheckCircle2 size={17} className={item.done ? "text-[#5f7f23]" : "text-[#c5bfae]"} />
-            <span className="text-sm font-medium">{item.label}</span>
-          </div>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-
 
 function BotInstructionCard() {
   return (
@@ -578,13 +630,35 @@ function StepPill({ number, label, done }: { number: string; label: string; done
   );
 }
 
-function getCompletion(business: Business, faqCount: number) {
+function getCompletion(business: Business, faqCount: number, activeServiceCount: number) {
   return [
     { label: "Nombre y contacto", done: Boolean(business.name && business.phone) },
     { label: "Descripcion del negocio", done: business.description.trim().length > 20 },
-    { label: "Servicios y precios", done: business.services.length > 0 },
+    { label: "Servicios y precios", done: activeServiceCount > 0 || business.services.length > 0 },
     { label: "Reglas del bot", done: business.rules.length > 0 },
     { label: "FAQs cargadas", done: faqCount > 0 },
+  ];
+}
+
+function getSetupSteps({
+  business,
+  completion,
+  hasSchedule,
+  hasLinks,
+}: {
+  business: Business;
+  completion: { label: string; done: boolean }[];
+  hasSchedule: boolean;
+  hasLinks: boolean;
+}) {
+  return [
+    { id: "business" as const, label: "Negocio", done: completion[0]?.done && completion[1]?.done && completion[3]?.done },
+    { id: "services" as const, label: "Servicios y precios", done: completion[2]?.done },
+    { id: "knowledge" as const, label: "Conocimiento y FAQs", done: completion[4]?.done },
+    { id: "schedule" as const, label: "Agenda", done: hasSchedule, optional: true },
+    { id: "links" as const, label: "Enlaces", done: hasLinks, optional: true },
+    { id: "whatsapp" as const, label: "WhatsApp", done: Boolean(business.whatsappPhoneNumberId), optional: true },
+    { id: "test" as const, label: "Probar asistente", done: false },
   ];
 }
 
