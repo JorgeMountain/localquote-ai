@@ -1,9 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
 import { withActionFeedback, type ActionState } from "@/lib/action-state";
-import { createClient } from "@/lib/supabase/server";
+import { getAuthenticatedClient } from "@/lib/server/auth";
 import { optionalInteger, optionalText, requiredText, requiredUuid } from "@/lib/validation";
 
 export async function createBusinessServiceWithFeedback(
@@ -79,15 +78,6 @@ function parseServiceInput(formData: FormData) {
     requires_evaluation: formData.get("requires_evaluation") === "on",
     is_active: formData.get("is_active") === "on",
   };
-}
-
-async function getAuthenticatedClient() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
-  return { supabase, user };
 }
 
 function throwFriendlyServiceError(error: { code?: string; message: string }): never {

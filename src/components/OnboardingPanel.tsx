@@ -1,5 +1,5 @@
 import { LogOut, MousePointerClick } from "lucide-react";
-import { signOut } from "@/app/actions";
+import { signOut } from "@/app/server-actions/auth";
 
 export function OnboardingPanel({ userEmail }: { userEmail?: string }) {
   return (

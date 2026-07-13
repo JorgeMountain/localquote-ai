@@ -5,13 +5,12 @@ import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
 import {
   confirmAppointmentAndNotifyWithFeedback,
-  sendQuoteAndNotifyWithFeedback,
   updateAppointmentStatusWithFeedback,
-  updateCustomerStatusWithFeedback,
-  updatePaymentReceiptStatusWithFeedback,
-  updateQuoteStatusWithFeedback,
-  type ActionState,
-} from "@/app/actions";
+} from "@/app/server-actions/appointments";
+import { updateCustomerStatusWithFeedback } from "@/app/server-actions/conversations";
+import { updatePaymentReceiptStatusWithFeedback } from "@/app/server-actions/payments";
+import { sendQuoteAndNotifyWithFeedback, updateQuoteStatusWithFeedback } from "@/app/server-actions/quotes";
+import type { ActionState } from "@/lib/action-state";
 import type { AppointmentStatus, LeadStatus, PaymentReceiptStatus, QuoteStatus } from "@/lib/types";
 
 export function CustomerStatusForm({ id, status }: { id: string; status: LeadStatus }) {

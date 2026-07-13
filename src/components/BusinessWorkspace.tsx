@@ -10,10 +10,8 @@ import {
   Link2,
   MessageSquareText,
   Plus,
-  Save,
   Settings2,
   Sparkles,
-  Trash2,
   type LucideIcon,
 } from "lucide-react";
 import type { ReactNode } from "react";
@@ -21,20 +19,15 @@ import { useActionState, useMemo, useState } from "react";
 import { useFormStatus } from "react-dom";
 import {
   createBusinessWithFeedback,
-  createAvailabilitySlotWithFeedback,
-  createBusinessLinkWithFeedback,
-  createFaqWithFeedback,
-  deleteAvailabilitySlotWithFeedback,
   deleteBusinessWithFeedback,
-  deleteBusinessLinkWithFeedback,
-  deleteFaqWithFeedback,
-  saveBusinessHoursWithFeedback,
-  updateBusinessWithFeedback,
-  updateBusinessLinkWithFeedback,
-  updateFaqWithFeedback,
-} from "@/app/actions";
+} from "@/app/server-actions/businesses";
 import { ActionMessage } from "@/components/ActionForms";
+import { BusinessLinksEditor } from "@/components/business/BusinessLinksEditor";
+import { BusinessProfileForm } from "@/components/business/BusinessProfileForm";
+import { FaqEditor } from "@/components/business/FaqEditor";
+import { ScheduleEditor } from "@/components/business/ScheduleEditor";
 import { ServicesEditor } from "@/components/business/ServicesEditor";
+import { WhatsAppStatus, type WhatsAppEnvironmentStatus } from "@/components/business/WhatsAppStatus";
 import type {
   AvailabilitySlot,
   Business,
@@ -66,18 +59,10 @@ export function BusinessWorkspace({
   availabilitySlots: AvailabilitySlot[];
   businessLinks: BusinessLink[];
   whatsappBusinessSlug: string;
-  whatsappEnvironmentStatus: {
-    appSecret: boolean;
-    accessToken: boolean;
-    phoneNumberId: boolean;
-    verifyToken: boolean;
-    appointmentTemplate: boolean;
-    quoteTemplate: boolean;
-  };
+  whatsappEnvironmentStatus: WhatsAppEnvironmentStatus;
 }) {
   const [selectedId, setSelectedId] = useState(businesses[0]?.id ?? "");
   const selectedBusiness = businesses.find((business) => business.id === selectedId) ?? businesses[0];
-  const [businessState, businessAction] = useActionState(updateBusinessWithFeedback, null);
   const businessFaqs = useMemo(
     () => (selectedBusiness ? faqs.filter((faq) => faq.businessId === selectedBusiness.id) : []),
     [faqs, selectedBusiness],
@@ -147,7 +132,7 @@ export function BusinessWorkspace({
             <div className="grid gap-6 xl:grid-cols-[0.82fr_1.18fr]">
               <aside className="grid content-start gap-4">
                 <CompletionCard completion={completion} business={selectedBusiness} faqCount={businessFaqs.length} />
-                <WhatsAppStatusCard
+                <WhatsAppStatus
                   business={selectedBusiness}
                   whatsappBusinessSlug={whatsappBusinessSlug}
                   environmentStatus={whatsappEnvironmentStatus}
@@ -157,58 +142,7 @@ export function BusinessWorkspace({
               </aside>
 
               <div className="grid gap-6">
-                <form
-                  key={selectedBusiness.id}
-                  action={businessAction}
-                  className="rounded-xl border border-black/10 bg-white p-5 shadow-sm"
-                >
-                  <input type="hidden" name="id" value={selectedBusiness.id} />
-                  <FormHeader
-                    icon={Building2}
-                    eyebrow="Paso 1"
-                    title="Datos del negocio"
-                    description="Esto identifica al negocio y le da contexto basico al asistente."
-                    action={<IconSubmitButton label="Guardar negocio" />}
-                  />
-                  <div className="mt-4">
-                    <ActionMessage state={businessState} />
-                  </div>
-                  <div className="mt-5 grid gap-4 md:grid-cols-2">
-                    <Field name="name" label="Nombre visible" defaultValue={selectedBusiness.name} required />
-                    <Field name="phone" label="Telefono o WhatsApp" defaultValue={selectedBusiness.phone} required />
-                    <Field
-                      name="whatsapp_phone_number_id"
-                      label="WhatsApp Phone Number ID"
-                      defaultValue={selectedBusiness.whatsappPhoneNumberId ?? ""}
-                      hint="Opcional. Permite conectar varios negocios y números de WhatsApp en la misma aplicación."
-                    />
-                    <Field name="location" label="Direccion o zona de cobertura" defaultValue={selectedBusiness.location} required />
-                    <Field name="hours" label="Horarios y disponibilidad" defaultValue={selectedBusiness.hours} textarea required />
-                    <Field
-                      name="description"
-                      label="Que hace el negocio"
-                      defaultValue={selectedBusiness.description}
-                      textarea
-                      required
-                    />
-                    <Field
-                      name="services"
-                      label="Texto heredado de servicios"
-                      defaultValue={selectedBusiness.services.join("\n")}
-                      textarea
-                      hint="Se conserva como respaldo durante la migracion. Gestiona precios en la seccion estructurada siguiente."
-                    />
-                    <Field
-                      name="rules"
-                      label="Instrucciones del bot"
-                      defaultValue={selectedBusiness.rules.join("\n")}
-                      textarea
-                      required
-                      hint="Ej: no confirmar citas sin validacion, pedir nombre y telefono, no inventar precios."
-                      className="md:col-span-2"
-                    />
-                  </div>
-                </form>
+                <BusinessProfileForm business={selectedBusiness} />
 
                 <section className="rounded-xl border border-black/10 bg-white p-5 shadow-sm">
                   <FormHeader
@@ -253,18 +187,7 @@ export function BusinessWorkspace({
                     description="Agrega respuestas aprobadas. El bot las usa como fuente principal antes de improvisar."
                   />
 
-                  <CreateFaqForm businessId={selectedBusiness.id} />
-
-                  <div className="mt-5 grid gap-3">
-                    {businessFaqs.map((faq) => (
-                      <FaqEditor key={faq.id} faq={faq} />
-                    ))}
-                    {businessFaqs.length === 0 && (
-                      <div className="rounded-lg border border-dashed border-black/15 bg-[#f8f6f1] p-5 text-sm text-[#706d62]">
-                        Todavia no hay FAQs. Crea al menos una con una pregunta real de cliente.
-                      </div>
-                    )}
-                  </div>
+                  <FaqEditor businessId={selectedBusiness.id} faqs={businessFaqs} />
                 </section>
 
                 <section className="rounded-xl border border-black/10 bg-[#111111] p-5 text-white shadow-sm">
@@ -402,238 +325,7 @@ function CompletionCard({
   );
 }
 
-function ScheduleEditor({
-  business,
-  businessHours,
-  availabilitySlots,
-}: {
-  business: Business;
-  businessHours: BusinessHour[];
-  availabilitySlots: AvailabilitySlot[];
-}) {
-  const [hoursState, hoursAction] = useActionState(saveBusinessHoursWithFeedback, null);
-  const [slotState, slotAction] = useActionState(createAvailabilitySlotWithFeedback, null);
 
-  return (
-    <div className="mt-5 grid gap-5">
-      <form action={hoursAction} className="rounded-lg border border-black/10 bg-[#f8f6f1] p-4">
-        <input type="hidden" name="business_id" value={business.id} />
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h3 className="font-semibold">Horario semanal opcional</h3>
-            <p className="mt-1 text-sm text-[#706d62]">
-              Si lo dejas vacio, el bot no bloquea horarios: solo registra solicitudes pendientes para revision.
-            </p>
-          </div>
-          <SubmitButton icon={Save} label="Guardar horario" />
-        </div>
-        <div className="mt-4 grid gap-3">
-          {weekDays.map((day) => {
-            const current = businessHours.find((hour) => hour.dayOfWeek === day.value);
-            return (
-              <div key={day.value} className="grid gap-3 rounded-lg border border-black/10 bg-white p-3 md:grid-cols-[1fr_1fr_1fr] md:items-center">
-                <label className="flex items-center gap-2 text-sm font-semibold">
-                  <input type="checkbox" name={`day_${day.value}_enabled`} defaultChecked={Boolean(current)} />
-                  {day.label}
-                </label>
-                <input
-                  className={inputClass("default")}
-                  type="time"
-                  name={`day_${day.value}_opens`}
-                  defaultValue={current?.opensAt ?? "09:00"}
-                />
-                <input
-                  className={inputClass("default")}
-                  type="time"
-                  name={`day_${day.value}_closes`}
-                  defaultValue={current?.closesAt ?? "18:00"}
-                />
-              </div>
-            );
-          })}
-        </div>
-        <div className="mt-4">
-          <ActionMessage state={hoursState} />
-        </div>
-      </form>
-
-      <form action={slotAction} className="rounded-lg border border-black/10 bg-[#f8f6f1] p-4">
-        <input type="hidden" name="business_id" value={business.id} />
-        <div>
-          <h3 className="font-semibold">Excepciones por fecha</h3>
-          <p className="mt-1 text-sm text-[#706d62]">
-            Usa esto solo para negocios que manejan agenda: abre cupos especiales, bloquea horas o marca horas ocupadas.
-          </p>
-        </div>
-        <div className="mt-4 grid gap-3 md:grid-cols-2">
-          <input className={inputClass("white")} type="date" name="date" required />
-          <select className={inputClass("white")} name="status" defaultValue="blocked">
-            <option value="available">Disponible especial</option>
-            <option value="blocked">Bloqueado</option>
-            <option value="booked">Ocupado</option>
-          </select>
-          <input className={inputClass("white")} type="time" name="start_time" defaultValue="09:00" required />
-          <input className={inputClass("white")} type="time" name="end_time" defaultValue="09:30" required />
-          <input className={inputClass("white", "md:col-span-2")} name="notes" placeholder="Nota opcional" />
-        </div>
-        <div className="mt-4 flex flex-wrap items-center gap-3">
-          <SubmitButton icon={Plus} label="Agregar excepcion" />
-          <ActionMessage state={slotState} />
-        </div>
-      </form>
-
-      <div className="rounded-lg border border-black/10 bg-white p-4">
-        <h3 className="font-semibold">Excepciones guardadas</h3>
-        <div className="mt-3 grid gap-2">
-          {availabilitySlots.map((slot) => (
-            <AvailabilitySlotRow key={slot.id} slot={slot} />
-          ))}
-          {availabilitySlots.length === 0 && (
-            <p className="rounded-lg border border-dashed border-black/15 bg-[#f8f6f1] p-4 text-sm text-[#706d62]">
-              No hay excepciones. Si tampoco hay horario semanal, el bot registrara citas como pendientes sin validar cupos.
-            </p>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function AvailabilitySlotRow({ slot }: { slot: AvailabilitySlot }) {
-  const [state, formAction] = useActionState(deleteAvailabilitySlotWithFeedback, null);
-  const statusLabel: Record<AvailabilitySlot["status"], string> = {
-    available: "Disponible",
-    blocked: "Bloqueado",
-    booked: "Ocupado",
-  };
-
-  return (
-    <article className="flex flex-col gap-3 rounded-lg border border-black/10 bg-[#f8f6f1] p-3 sm:flex-row sm:items-center sm:justify-between">
-      <div className="text-sm">
-        <p className="font-semibold">
-          {slot.date} · {slot.startTime} - {slot.endTime}
-        </p>
-        <p className="mt-1 text-[#706d62]">
-          {statusLabel[slot.status]}
-          {slot.notes ? ` · ${slot.notes}` : ""}
-        </p>
-      </div>
-      <form action={formAction} className="flex flex-wrap items-center gap-2">
-        <input type="hidden" name="id" value={slot.id} />
-        <button className="inline-flex h-9 items-center gap-2 rounded-lg border border-black/15 bg-white px-3 text-sm font-semibold">
-          <Trash2 size={15} />
-          Eliminar
-        </button>
-        <ActionMessage state={state} compact />
-      </form>
-    </article>
-  );
-}
-
-function WhatsAppStatusCard({
-  business,
-  whatsappBusinessSlug,
-  environmentStatus,
-}: {
-  business: Business;
-  whatsappBusinessSlug: string;
-  environmentStatus: {
-    appSecret: boolean;
-    accessToken: boolean;
-    phoneNumberId: boolean;
-    verifyToken: boolean;
-    appointmentTemplate: boolean;
-    quoteTemplate: boolean;
-  };
-}) {
-  const isConnected =
-    Boolean(business.whatsappPhoneNumberId)
-    || (Boolean(whatsappBusinessSlug) && whatsappBusinessSlug === business.slug);
-
-  return (
-    <section className="rounded-xl border border-black/10 bg-white p-5 shadow-sm">
-      <div className="flex items-center gap-2 font-semibold">
-        <Link2 size={18} />
-        WhatsApp
-      </div>
-      <div
-        className={`mt-4 rounded-lg border px-3 py-2 text-sm font-semibold ${
-          isConnected
-            ? "border-[#93b35d]/40 bg-[#eef7d2] text-[#3f551c]"
-            : "border-amber-200 bg-amber-50 text-amber-800"
-        }`}
-      >
-        {isConnected ? "Este negocio esta conectado a WhatsApp." : "Este negocio aun no tiene un número de WhatsApp asociado."}
-      </div>
-      <dl className="mt-4 grid gap-3 text-sm">
-        <div>
-          <dt className="font-semibold">Slug de este negocio</dt>
-          <dd className="mt-1 rounded-md bg-[#f8f6f1] px-3 py-2 font-mono text-xs">{business.slug}</dd>
-        </div>
-        <div>
-          <dt className="font-semibold">Phone Number ID</dt>
-          <dd className="mt-1 rounded-md bg-[#f8f6f1] px-3 py-2 font-mono text-xs">
-            {business.whatsappPhoneNumberId || "sin configurar"}
-          </dd>
-        </div>
-        <div>
-          <dt className="font-semibold">Slug activo en WhatsApp</dt>
-          <dd className="mt-1 rounded-md bg-[#f8f6f1] px-3 py-2 font-mono text-xs">
-            {whatsappBusinessSlug || "sin configurar"}
-          </dd>
-        </div>
-      </dl>
-      <div className="mt-4 border-t border-black/10 pt-4">
-        <p className="text-sm font-semibold">Configuracion segura del servidor</p>
-        <div className="mt-3 grid gap-2">
-          <EnvironmentCheck label="App Secret de Meta" configured={environmentStatus.appSecret} required />
-          <EnvironmentCheck label="Access Token" configured={environmentStatus.accessToken} required />
-          <EnvironmentCheck label="Phone Number ID global" configured={environmentStatus.phoneNumberId} />
-          <EnvironmentCheck label="Verify Token" configured={environmentStatus.verifyToken} required />
-          <EnvironmentCheck
-            label="Plantilla para confirmar citas"
-            configured={environmentStatus.appointmentTemplate}
-          />
-          <EnvironmentCheck label="Plantilla para cotizaciones" configured={environmentStatus.quoteTemplate} />
-        </div>
-        {!environmentStatus.appSecret && (
-          <p className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm leading-6 text-red-800">
-            WhatsApp permanece bloqueado en produccion hasta agregar WHATSAPP_APP_SECRET en Vercel.
-          </p>
-        )}
-        {(!environmentStatus.appointmentTemplate || !environmentStatus.quoteTemplate) && (
-          <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm leading-6 text-amber-900">
-            Configura plantillas aprobadas para notificar fuera de la ventana de 24 horas de WhatsApp.
-          </p>
-        )}
-      </div>
-      {!isConnected && (
-        <p className="mt-3 text-sm leading-6 text-[#706d62]">
-          Agrega el Phone Number ID de Meta. El slug global queda solo como respaldo para pruebas antiguas.
-        </p>
-      )}
-    </section>
-  );
-}
-
-function EnvironmentCheck({
-  label,
-  configured,
-  required,
-}: {
-  label: string;
-  configured: boolean;
-  required?: boolean;
-}) {
-  return (
-    <div className="flex items-center justify-between gap-3 rounded-lg bg-[#f8f6f1] px-3 py-2 text-sm">
-      <span>{label}{required ? " *" : ""}</span>
-      <span className={`font-semibold ${configured ? "text-[#3f551c]" : "text-red-700"}`}>
-        {configured ? "Configurado" : "Falta"}
-      </span>
-    </div>
-  );
-}
 
 function BotInstructionCard() {
   return (
@@ -815,141 +507,6 @@ function CreateBusinessFields({
   );
 }
 
-function CreateFaqForm({ businessId }: { businessId: string }) {
-  const [state, formAction] = useActionState(createFaqWithFeedback, null);
-
-  return (
-    <form action={formAction} className="mt-5 grid gap-3 rounded-lg border border-black/10 bg-[#f8f6f1] p-4">
-      <input type="hidden" name="business_id" value={businessId} />
-      <input className={inputClass()} name="question" placeholder="Pregunta real del cliente" required />
-      <textarea
-        className={textareaClass()}
-        name="answer"
-        placeholder="Respuesta exacta que quieres que use el bot"
-        required
-      />
-      <input className={inputClass()} name="category" placeholder="Categoria opcional: precios, horarios, citas..." />
-      <div className="flex flex-wrap items-center gap-3">
-        <SubmitButton icon={Plus} label="Crear FAQ" />
-        <ActionMessage state={state} />
-      </div>
-    </form>
-  );
-}
-
-function FaqEditor({ faq }: { faq: BusinessFaq }) {
-  const [updateState, updateAction] = useActionState(updateFaqWithFeedback, null);
-  const [deleteState, deleteAction] = useActionState(deleteFaqWithFeedback, null);
-
-  return (
-    <article className="rounded-lg border border-black/10 bg-[#f8f6f1] p-4">
-      <form action={updateAction} className="grid gap-3">
-        <input type="hidden" name="id" value={faq.id} />
-        <input className={inputClass("white", "font-semibold")} name="question" defaultValue={faq.question} />
-        <textarea className={textareaClass("bg-white")} name="answer" defaultValue={faq.answer} />
-        <input className={inputClass("white")} name="category" defaultValue={faq.category ?? ""} placeholder="Categoria" />
-        <div className="flex flex-wrap items-center gap-2">
-          <SubmitButton icon={Save} label="Guardar FAQ" small />
-          <ActionMessage state={updateState} compact />
-        </div>
-      </form>
-      <form action={deleteAction} className="mt-2 flex flex-wrap items-center gap-2">
-        <input type="hidden" name="id" value={faq.id} />
-        <button className="inline-flex h-9 items-center gap-2 rounded-lg border border-black/15 bg-white px-3 text-sm font-semibold">
-          <Trash2 size={15} />
-          Eliminar
-        </button>
-        <ActionMessage state={deleteState} compact />
-      </form>
-    </article>
-  );
-}
-
-function BusinessLinksEditor({ businessId, links }: { businessId: string; links: BusinessLink[] }) {
-  const [state, formAction] = useActionState(createBusinessLinkWithFeedback, null);
-
-  return (
-    <div className="mt-5 grid gap-4">
-      <form action={formAction} className="grid gap-3 rounded-lg border border-black/10 bg-[#f8f6f1] p-4 md:grid-cols-2">
-        <input type="hidden" name="business_id" value={businessId} />
-        <input className={inputClass()} name="label" placeholder="Nombre del enlace. Ej: Catalogo" required />
-        <input className={inputClass()} name="url" placeholder="https://..." required />
-        <select className={inputClass()} name="purpose" defaultValue="general" aria-label="Uso del enlace">
-          <option value="general">General</option>
-          <option value="booking">Reserva / agenda externa</option>
-          <option value="payment">Pago</option>
-          <option value="catalog">Catalogo</option>
-          <option value="location">Ubicacion</option>
-          <option value="support">Soporte</option>
-        </select>
-        <label className="flex h-11 items-center gap-2 rounded-lg border border-black/15 bg-[#f8f6f1] px-3 text-sm">
-          <input type="checkbox" name="is_active" defaultChecked />
-          Activo para el bot
-        </label>
-        <textarea
-          className={textareaClass("md:col-span-2")}
-          name="notes"
-          placeholder="Cuando debe enviarlo. Ej: Si piden pagar anticipo, enviar este link."
-        />
-        <div className="flex flex-wrap items-center gap-3 md:col-span-2">
-          <SubmitButton icon={Plus} label="Agregar enlace" />
-          <ActionMessage state={state} />
-        </div>
-      </form>
-
-      <div className="grid gap-3">
-        {links.map((link) => (
-          <BusinessLinkEditor key={link.id} link={link} />
-        ))}
-        {links.length === 0 && (
-          <p className="rounded-lg border border-dashed border-black/15 bg-[#f8f6f1] p-4 text-sm text-[#706d62]">
-            No hay enlaces. Si el cliente pide un link, el bot respondera que debe confirmarlo con el negocio.
-          </p>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function BusinessLinkEditor({ link }: { link: BusinessLink }) {
-  const [updateState, updateAction] = useActionState(updateBusinessLinkWithFeedback, null);
-  const [deleteState, deleteAction] = useActionState(deleteBusinessLinkWithFeedback, null);
-
-  return (
-    <article className="rounded-lg border border-black/10 bg-[#f8f6f1] p-4">
-      <form action={updateAction} className="grid gap-3 md:grid-cols-2">
-        <input type="hidden" name="id" value={link.id} />
-        <input className={inputClass("white", "font-semibold")} name="label" defaultValue={link.label} />
-        <input className={inputClass("white")} name="url" defaultValue={link.url} />
-        <select className={inputClass("white")} name="purpose" defaultValue={link.purpose} aria-label="Uso del enlace">
-          <option value="general">General</option>
-          <option value="booking">Reserva / agenda externa</option>
-          <option value="payment">Pago</option>
-          <option value="catalog">Catalogo</option>
-          <option value="location">Ubicacion</option>
-          <option value="support">Soporte</option>
-        </select>
-        <label className="flex h-11 items-center gap-2 rounded-lg border border-black/15 bg-white px-3 text-sm">
-          <input type="checkbox" name="is_active" defaultChecked={link.isActive} />
-          Activo para el bot
-        </label>
-        <textarea className={textareaClass("bg-white md:col-span-2")} name="notes" defaultValue={link.notes} />
-        <div className="flex flex-wrap items-center gap-2 md:col-span-2">
-          <SubmitButton icon={Save} label="Guardar enlace" small />
-          <ActionMessage state={updateState} compact />
-        </div>
-      </form>
-      <form action={deleteAction} className="mt-2 flex flex-wrap items-center gap-2">
-        <input type="hidden" name="id" value={link.id} />
-        <button className="inline-flex h-9 items-center gap-2 rounded-lg border border-black/15 bg-white px-3 text-sm font-semibold">
-          <Trash2 size={15} />
-          Eliminar
-        </button>
-        <ActionMessage state={deleteState} compact />
-      </form>
-    </article>
-  );
-}
 
 function FormHeader({
   icon: Icon,
@@ -985,49 +542,6 @@ function FormHeader({
   );
 }
 
-function Field({
-  name,
-  label,
-  defaultValue,
-  textarea,
-  required,
-  hint,
-  className = "",
-}: {
-  name: string;
-  label: string;
-  defaultValue: string;
-  textarea?: boolean;
-  required?: boolean;
-  hint?: string;
-  className?: string;
-}) {
-  return (
-    <label className={`grid gap-2 text-sm font-semibold ${className}`}>
-      {label}
-      {textarea ? (
-        <textarea name={name} className={textareaClass()} defaultValue={defaultValue} required={required} />
-      ) : (
-        <input name={name} className={inputClass()} defaultValue={defaultValue} required={required} />
-      )}
-      {hint && <span className="text-xs font-normal leading-5 text-[#706d62]">{hint}</span>}
-    </label>
-  );
-}
-
-function IconSubmitButton({ label }: { label: string }) {
-  const { pending } = useFormStatus();
-
-  return (
-    <button
-      className="flex size-11 items-center justify-center rounded-lg bg-black text-white disabled:cursor-not-allowed disabled:opacity-60"
-      aria-label={label}
-      disabled={pending}
-    >
-      {pending ? <span className="size-4 rounded-full border-2 border-white/40 border-t-white" /> : <Save size={17} />}
-    </button>
-  );
-}
 
 function SubmitButton({
   icon: Icon,
@@ -1063,16 +577,6 @@ function StepPill({ number, label, done }: { number: string; label: string; done
     </div>
   );
 }
-
-const weekDays = [
-  { value: 0, label: "Domingo" },
-  { value: 1, label: "Lunes" },
-  { value: 2, label: "Martes" },
-  { value: 3, label: "Miercoles" },
-  { value: 4, label: "Jueves" },
-  { value: 5, label: "Viernes" },
-  { value: 6, label: "Sabado" },
-];
 
 function getCompletion(business: Business, faqCount: number) {
   return [
