@@ -50,11 +50,21 @@ export default async function QuotesPage({ searchParams }: QuotesPageProps) {
                       <div className="flex flex-wrap items-center gap-2">
                         <h2 className="text-lg font-semibold">{quote.service}</h2>
                         <StatusBadge value={quote.status} />
+                        <span className="text-xs text-[#706d62]">Entrega:</span>
+                        <StatusBadge value={quote.deliveryStatus} />
                       </div>
                       <p className="mt-1 text-sm text-[#706d62]">
                         {customer?.name} - {business?.name}
                       </p>
                       <p className="mt-3 max-w-3xl text-sm leading-6 text-[#37342c]">{quote.description}</p>
+                      {quote.sentAt && (
+                        <p className="mt-2 text-xs text-[#706d62]">
+                          Enviada {new Date(quote.sentAt).toLocaleString("es-CO")}
+                        </p>
+                      )}
+                      {quote.errorMessage && (
+                        <p className="mt-2 text-sm text-red-700">No entregada. Revisa la configuracion de WhatsApp.</p>
+                      )}
                     </div>
                     <div className="grid gap-3 lg:min-w-72">
                       <QuoteStatusForm id={quote.id} status={quote.status} />

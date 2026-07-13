@@ -4,6 +4,8 @@ import { Check, Send, Save } from "lucide-react";
 import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
 import {
+  confirmAppointmentAndNotifyWithFeedback,
+  sendQuoteAndNotifyWithFeedback,
   updateAppointmentStatusWithFeedback,
   updateCustomerStatusWithFeedback,
   updatePaymentReceiptStatusWithFeedback,
@@ -41,7 +43,7 @@ export function AppointmentStatusForm({ id, status }: { id: string; status: Appo
       <div className="flex flex-wrap items-center gap-2">
         <select className="h-9 rounded-md border border-black/15 bg-[#f8f6f1] px-2 text-sm" name="status" defaultValue={status}>
           <option value="pending">Pendiente</option>
-          <option value="confirmed">Confirmada</option>
+          <option value="confirmed">Confirmada (solo estado)</option>
           <option value="cancelled">Cancelada</option>
         </select>
         <SubmitButton label="Guardar" />
@@ -60,7 +62,7 @@ export function QuoteStatusForm({ id, status }: { id: string; status: QuoteStatu
       <div className="flex flex-wrap items-center gap-2">
         <select className="h-9 rounded-md border border-black/15 bg-[#f8f6f1] px-2 text-sm" name="status" defaultValue={status}>
           <option value="draft">Borrador</option>
-          <option value="sent">Enviada</option>
+          <option value="sent">Enviada (solo estado)</option>
           <option value="accepted">Aceptada</option>
           <option value="rejected">Rechazada</option>
         </select>
@@ -111,8 +113,8 @@ export function QuickAppointmentButton({ id }: { id: string }) {
     <QuickStatusForm
       id={id}
       status="confirmed"
-      label="Confirmar cita"
-      action={updateAppointmentStatusWithFeedback}
+      label="Confirmar y notificar"
+      action={confirmAppointmentAndNotifyWithFeedback}
       icon="check"
     />
   );
@@ -120,7 +122,13 @@ export function QuickAppointmentButton({ id }: { id: string }) {
 
 export function QuickQuoteSentButton({ id }: { id: string }) {
   return (
-    <QuickStatusForm id={id} status="sent" label="Enviar cotizacion" action={updateQuoteStatusWithFeedback} icon="send" />
+    <QuickStatusForm
+      id={id}
+      status="sent"
+      label="Enviar por WhatsApp"
+      action={sendQuoteAndNotifyWithFeedback}
+      icon="send"
+    />
   );
 }
 

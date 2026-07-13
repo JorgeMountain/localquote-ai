@@ -101,6 +101,7 @@ export async function processChatMessage(input: {
       conversationId: session.conversation_id,
       ...analysis.appointmentDraft,
       status: "pending" as const,
+      deliveryStatus: "pending" as const,
     };
     const created = await createInternalAppointment(supabase, candidate);
     if (created) {
@@ -118,6 +119,7 @@ export async function processChatMessage(input: {
           customerId: session.customer_id,
           ...analysis.quoteDraft,
           status: "draft" as const,
+          deliveryStatus: "pending" as const,
         }
       : undefined;
   const shouldAppendCommercialReply =

@@ -161,6 +161,7 @@ export async function getInternalChatContext(
       preferredDate: appointment.preferred_date,
       preferredTime: appointment.preferred_time,
       status: appointment.status,
+      deliveryStatus: "pending",
     })),
   };
 }

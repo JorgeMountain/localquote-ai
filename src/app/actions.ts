@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { businesses, faqs } from "@/lib/seed";
+import { notifyCustomer } from "@/lib/customer-notifications";
 import { createClient } from "@/lib/supabase/server";
 import type {
   AppointmentStatus,
@@ -561,7 +562,7 @@ export async function updateAppointmentStatusWithFeedback(
   const status = parseAppointmentStatus(String(formData.get("status") ?? ""));
   const labels: Record<AppointmentStatus, string> = {
     pending: "Cita marcada como pendiente.",
-    confirmed: "Cita confirmada.",
+    confirmed: "Cita marcada como confirmada manualmente; no se envio un mensaje.",
     cancelled: "Cita cancelada.",
   };
   return withFeedback(() => updateAppointmentStatusCore(formData), labels[status]);
@@ -589,6 +590,73 @@ async function updateAppointmentStatusCore(formData: FormData) {
   revalidatePath("/conversations");
 }
 
+export async function confirmAppointmentAndNotifyWithFeedback(
+  _state: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  return withFeedback(
+    () => confirmAppointmentAndNotify(String(formData.get("id") ?? "")),
+    "Cita confirmada y cliente notificado por WhatsApp.",
+  );
+}
+
+async function confirmAppointmentAndNotify(id: string) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  const { data: appointment, error } = await supabase
+    .from("appointment_requests")
+    .select("id,business_id,customer_id,conversation_id,service,preferred_date,preferred_time")
+    .eq("id", id)
+    .single();
+  if (error || !appointment) throw error ?? new Error("Solicitud de cita no encontrada.");
+
+  const delivery = await getWhatsAppDeliveryContext(
+    supabase,
+    appointment.business_id,
+    appointment.customer_id,
+    appointment.conversation_id,
+  );
+  await setDeliveryPending(supabase, "appointment_requests", appointment.id);
+
+  let providerMessageId: string;
+  try {
+    const result = await notifyCustomer({
+      type: "appointment",
+      customerName: delivery.customer.name,
+      customerPhone: delivery.customer.phone,
+      businessName: delivery.business.name,
+      sourcePhoneNumberId: delivery.business.whatsapp_phone_number_id ?? undefined,
+      service: appointment.service,
+      date: appointment.preferred_date,
+      time: appointment.preferred_time,
+    });
+    providerMessageId = result.providerMessageId;
+  } catch (sendError) {
+    await setDeliveryFailed(supabase, "appointment_requests", appointment.id, sendError);
+    throw new Error("No se pudo notificar al cliente. La cita no se marco como confirmada.");
+  }
+
+  const { error: updateError } = await supabase
+    .from("appointment_requests")
+    .update({
+      status: "confirmed",
+      delivery_status: "sent",
+      sent_at: new Date().toISOString(),
+      error_message: null,
+      provider_message_id: providerMessageId,
+    })
+    .eq("id", appointment.id)
+    .select("id")
+    .single();
+  if (updateError) throw new Error("El mensaje fue enviado, pero no se pudo guardar la confirmacion.");
+
+  revalidateCommercialPaths();
+}
+
 export async function updateQuoteStatus(formData: FormData) {
   await updateQuoteStatusCore(formData);
 }
@@ -597,7 +665,7 @@ export async function updateQuoteStatusWithFeedback(_state: ActionState, formDat
   const status = parseQuoteStatus(String(formData.get("status") ?? ""));
   const labels: Record<QuoteStatus, string> = {
     draft: "Cotizacion marcada como borrador.",
-    sent: "Cotizacion enviada.",
+    sent: "Cotizacion marcada como enviada manualmente; no se envio un mensaje.",
     accepted: "Cotizacion aceptada.",
     rejected: "Cotizacion rechazada.",
   };
@@ -624,6 +692,75 @@ async function updateQuoteStatusCore(formData: FormData) {
   revalidatePath("/");
   revalidatePath("/quotes");
   revalidatePath("/conversations");
+}
+
+export async function sendQuoteAndNotifyWithFeedback(
+  _state: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  return withFeedback(
+    () => sendQuoteAndNotify(String(formData.get("id") ?? "")),
+    "Cotizacion enviada al cliente por WhatsApp.",
+  );
+}
+
+async function sendQuoteAndNotify(id: string) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  const { data: quote, error } = await supabase
+    .from("quotes")
+    .select("id,business_id,customer_id,conversation_id,service,description,min_price,max_price,notes")
+    .eq("id", id)
+    .single();
+  if (error || !quote) throw error ?? new Error("Cotizacion no encontrada.");
+
+  const delivery = await getWhatsAppDeliveryContext(
+    supabase,
+    quote.business_id,
+    quote.customer_id,
+    quote.conversation_id,
+  );
+  await setDeliveryPending(supabase, "quotes", quote.id);
+
+  let providerMessageId: string;
+  try {
+    const result = await notifyCustomer({
+      type: "quote",
+      customerName: delivery.customer.name,
+      customerPhone: delivery.customer.phone,
+      businessName: delivery.business.name,
+      sourcePhoneNumberId: delivery.business.whatsapp_phone_number_id ?? undefined,
+      service: quote.service,
+      description: quote.description,
+      minPrice: quote.min_price,
+      maxPrice: quote.max_price,
+      notes: quote.notes,
+    });
+    providerMessageId = result.providerMessageId;
+  } catch (sendError) {
+    await setDeliveryFailed(supabase, "quotes", quote.id, sendError);
+    throw new Error("No se pudo enviar la cotizacion. Se conservo su estado anterior.");
+  }
+
+  const { error: updateError } = await supabase
+    .from("quotes")
+    .update({
+      status: "sent",
+      delivery_status: "sent",
+      sent_at: new Date().toISOString(),
+      error_message: null,
+      provider_message_id: providerMessageId,
+    })
+    .eq("id", quote.id)
+    .select("id")
+    .single();
+  if (updateError) throw new Error("El mensaje fue enviado, pero no se pudo guardar el estado de la cotizacion.");
+
+  revalidateCommercialPaths();
 }
 
 export async function updateCustomerStatus(formData: FormData) {
@@ -659,6 +796,99 @@ async function updateCustomerStatusCore(formData: FormData) {
 
   if (error) throw error;
   revalidatePath("/");
+  revalidatePath("/conversations");
+}
+
+type DeliveryTable = "appointment_requests" | "quotes";
+
+async function getWhatsAppDeliveryContext(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  businessId: string,
+  customerId: string,
+  conversationId: string | null,
+) {
+  if (!conversationId) {
+    throw new Error("Este registro no tiene una conversacion asociada; no se enviara automaticamente.");
+  }
+
+  const [businessResult, customerResult, conversationResult] = await Promise.all([
+    supabase
+      .from("businesses")
+      .select("id,name,whatsapp_phone_number_id")
+      .eq("id", businessId)
+      .single(),
+    supabase.from("customers").select("id,name,phone").eq("id", customerId).single(),
+    supabase
+      .from("conversations")
+      .select("id,channel")
+      .eq("id", conversationId)
+      .eq("business_id", businessId)
+      .eq("customer_id", customerId)
+      .single(),
+  ]);
+
+  if (businessResult.error || !businessResult.data) {
+    throw businessResult.error ?? new Error("Negocio no encontrado.");
+  }
+  if (customerResult.error || !customerResult.data) {
+    throw customerResult.error ?? new Error("Cliente no encontrado.");
+  }
+  if (conversationResult.error || !conversationResult.data) {
+    throw conversationResult.error ?? new Error("Conversacion no encontrada.");
+  }
+  if (conversationResult.data.channel !== "whatsapp") {
+    throw new Error("El cliente no llego por un canal de WhatsApp valido; no se enviara automaticamente.");
+  }
+
+  return {
+    business: businessResult.data,
+    customer: customerResult.data,
+  };
+}
+
+async function setDeliveryPending(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  table: DeliveryTable,
+  id: string,
+) {
+  const { error } = await supabase
+    .from(table)
+    .update({
+      delivery_status: "pending",
+      sent_at: null,
+      error_message: null,
+      provider_message_id: null,
+    })
+    .eq("id", id)
+    .select("id")
+    .single();
+  if (error) throw error;
+}
+
+async function setDeliveryFailed(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  table: DeliveryTable,
+  id: string,
+  error: unknown,
+) {
+  const errorMessage = error instanceof Error ? error.message : "Error desconocido de WhatsApp.";
+  const { error: updateError } = await supabase
+    .from(table)
+    .update({
+      delivery_status: "failed",
+      sent_at: null,
+      error_message: errorMessage.slice(0, 1500),
+      provider_message_id: null,
+    })
+    .eq("id", id);
+
+  if (updateError) console.error("Could not persist WhatsApp delivery failure.", updateError);
+}
+
+function revalidateCommercialPaths() {
+  revalidatePath("/");
+  revalidatePath("/appointments");
+  revalidatePath("/quotes");
   revalidatePath("/conversations");
 }
 

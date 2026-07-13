@@ -15,6 +15,8 @@ export type AppointmentStatus = "pending" | "confirmed" | "cancelled";
 
 export type QuoteStatus = "draft" | "sent" | "accepted" | "rejected";
 
+export type DeliveryStatus = "pending" | "sent" | "failed";
+
 export type AvailabilityStatus = "available" | "blocked" | "booked";
 
 export type BusinessLinkPurpose = "general" | "booking" | "payment" | "catalog" | "location" | "support";
@@ -90,6 +92,10 @@ export type AppointmentRequest = {
   preferredDate: string;
   preferredTime: string;
   status: AppointmentStatus;
+  deliveryStatus: DeliveryStatus;
+  sentAt?: string;
+  errorMessage?: string;
+  providerMessageId?: string;
 };
 
 export type Quote = {
@@ -102,6 +108,10 @@ export type Quote = {
   maxPrice: number;
   notes: string;
   status: QuoteStatus;
+  deliveryStatus: DeliveryStatus;
+  sentAt?: string;
+  errorMessage?: string;
+  providerMessageId?: string;
 };
 
 export type ChatRequest = {

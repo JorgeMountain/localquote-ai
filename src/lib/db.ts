@@ -79,6 +79,10 @@ type AppointmentRow = {
   preferred_date: string;
   preferred_time: string;
   status: AppointmentRequest["status"];
+  delivery_status: AppointmentRequest["deliveryStatus"];
+  sent_at: string | null;
+  error_message: string | null;
+  provider_message_id: string | null;
 };
 
 type QuoteRow = {
@@ -91,6 +95,10 @@ type QuoteRow = {
   max_price: number;
   notes: string;
   status: Quote["status"];
+  delivery_status: Quote["deliveryStatus"];
+  sent_at: string | null;
+  error_message: string | null;
+  provider_message_id: string | null;
 };
 
 type BusinessLinkRow = {
@@ -377,6 +385,10 @@ function mapAppointment(row: AppointmentRow): AppointmentRequest {
     preferredDate: row.preferred_date,
     preferredTime: row.preferred_time,
     status: row.status,
+    deliveryStatus: row.delivery_status,
+    sentAt: row.sent_at ?? undefined,
+    errorMessage: row.error_message ?? undefined,
+    providerMessageId: row.provider_message_id ?? undefined,
   };
 }
 
@@ -391,6 +403,10 @@ function mapQuote(row: QuoteRow): Quote {
     maxPrice: row.max_price,
     notes: row.notes,
     status: row.status,
+    deliveryStatus: row.delivery_status,
+    sentAt: row.sent_at ?? undefined,
+    errorMessage: row.error_message ?? undefined,
+    providerMessageId: row.provider_message_id ?? undefined,
   };
 }
 

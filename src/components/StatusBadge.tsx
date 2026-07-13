@@ -11,6 +11,7 @@ const labels: Record<string, string> = {
   accepted: "Aceptada",
   approved: "Aprobado",
   rejected: "Rechazada",
+  failed: "Fallida",
   faq: "FAQ",
   quote: "Cotizacion",
   handoff: "Confirmar",

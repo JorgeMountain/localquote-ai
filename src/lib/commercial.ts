@@ -3,8 +3,8 @@ import type { AppointmentRequest, Business, Conversation, Quote } from "./types"
 export type CommercialAnalysis = {
   intent: Conversation["lastIntent"];
   missingFields: string[];
-  appointmentDraft?: Omit<AppointmentRequest, "id" | "businessId" | "customerId" | "status">;
-  quoteDraft?: Omit<Quote, "id" | "businessId" | "customerId" | "status">;
+  appointmentDraft?: Pick<AppointmentRequest, "service" | "preferredDate" | "preferredTime">;
+  quoteDraft?: Pick<Quote, "service" | "description" | "minPrice" | "maxPrice" | "notes">;
 };
 
 const appointmentWords = [

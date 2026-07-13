@@ -58,6 +58,9 @@ Variables del servidor:
 - `WHATSAPP_ACCESS_TOKEN`: token de WhatsApp Cloud API
 - `WHATSAPP_PHONE_NUMBER_ID`: número emisor de respaldo
 - `WHATSAPP_DEFAULT_BUSINESS_SLUG`: negocio de respaldo para la configuración antigua de un solo número
+- `WHATSAPP_APPOINTMENT_TEMPLATE_NAME`: plantilla aprobada para confirmar citas fuera de la ventana de 24 horas
+- `WHATSAPP_QUOTE_TEMPLATE_NAME`: plantilla aprobada para enviar cotizaciones fuera de la ventana de 24 horas
+- `WHATSAPP_TEMPLATE_LANGUAGE`: idioma de las plantillas; por defecto `es_CO`
 - `BUSINESS_TIME_ZONE`: zona horaria usada por la agenda; por defecto `America/Bogota`
 
 Variables públicas:
@@ -103,6 +106,8 @@ Para producción:
 4. Guarda el Phone Number ID correspondiente en cada negocio.
 
 En Vercel abre **Project Settings > Environment Variables**, crea `WHATSAPP_APP_SECRET` para Production y vuelve a desplegar. La pantalla **Configurar bot** muestra solo si cada variable existe; nunca muestra sus valores.
+
+Los botones **Confirmar y notificar** y **Enviar por WhatsApp** solo cambian el estado después de que Meta devuelve un identificador de mensaje. Si falla, la entrega queda como `failed` y el estado comercial anterior se conserva. Para conversaciones fuera de la ventana de 24 horas, crea las dos plantillas aprobadas en Meta y configura sus nombres. La plantilla de cita espera cinco variables (cliente, negocio, servicio, fecha y hora); la de cotización espera cinco (cliente, negocio, servicio, rango y descripción).
 
 ## IA
 

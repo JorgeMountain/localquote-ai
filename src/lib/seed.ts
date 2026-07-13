@@ -180,6 +180,7 @@ export const appointmentRequests: AppointmentRequest[] = [
     preferredDate: "2026-07-02",
     preferredTime: "10:00",
     status: "pending",
+    deliveryStatus: "pending",
   },
 ];
 
@@ -194,5 +195,6 @@ export const quotes: Quote[] = [
     maxPrice: 180000,
     notes: "Estimado sujeto a diagnostico y repuestos.",
     status: "sent",
+    deliveryStatus: "pending",
   },
 ];

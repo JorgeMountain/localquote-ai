@@ -1,4 +1,54 @@
 export async function sendWhatsAppText(to: string, body: string, sourcePhoneNumberId?: string) {
+  return sendWhatsAppPayload(
+    to,
+    {
+      messaging_product: "whatsapp",
+      type: "text",
+      text: {
+        preview_url: false,
+        body: body.slice(0, 3900),
+      },
+    },
+    sourcePhoneNumberId,
+  );
+}
+
+export async function sendWhatsAppTemplate(
+  to: string,
+  templateName: string,
+  parameters: string[],
+  sourcePhoneNumberId?: string,
+) {
+  const languageCode = process.env.WHATSAPP_TEMPLATE_LANGUAGE?.trim() || "es_CO";
+
+  return sendWhatsAppPayload(
+    to,
+    {
+      messaging_product: "whatsapp",
+      type: "template",
+      template: {
+        name: templateName,
+        language: { code: languageCode },
+        components: [
+          {
+            type: "body",
+            parameters: parameters.map((parameter) => ({
+              type: "text",
+              text: parameter.slice(0, 1024),
+            })),
+          },
+        ],
+      },
+    },
+    sourcePhoneNumberId,
+  );
+}
+
+async function sendWhatsAppPayload(
+  to: string,
+  payload: Record<string, unknown>,
+  sourcePhoneNumberId?: string,
+) {
   const phoneNumberId = sourcePhoneNumberId || process.env.WHATSAPP_PHONE_NUMBER_ID;
   const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
   const normalizedTo = normalizeWhatsAppPhone(to);
@@ -18,20 +68,21 @@ export async function sendWhatsAppText(to: string, body: string, sourcePhoneNumb
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      messaging_product: "whatsapp",
       to: normalizedTo,
-      type: "text",
-      text: {
-        preview_url: false,
-        body: body.slice(0, 3900),
-      },
+      ...payload,
     }),
   });
 
   if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`WhatsApp send failed: ${error}`);
+    const error = (await response.text()).slice(0, 1200);
+    throw new Error(`WhatsApp send failed (${response.status}): ${error}`);
   }
+
+  const data = (await response.json()) as { messages?: Array<{ id?: string }> };
+  const providerMessageId = data.messages?.[0]?.id?.trim();
+  if (!providerMessageId) throw new Error("WhatsApp accepted the request without returning a message ID.");
+
+  return { providerMessageId };
 }
 
 export function normalizeWhatsAppPhone(phone: string) {

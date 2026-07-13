@@ -46,7 +46,7 @@ export default async function AppointmentsPage({ searchParams }: AppointmentsPag
             allLabel="Todas las solicitudes"
           />
           <div className="overflow-x-auto rounded-md border border-black/10 bg-white p-5">
-            <table className="w-full min-w-[820px] text-left text-sm">
+            <table className="w-full min-w-[920px] text-left text-sm">
               <thead className="text-xs uppercase tracking-[0.18em] text-[#706d62]">
                 <tr>
                   <th className="py-3">Cliente</th>
@@ -54,6 +54,7 @@ export default async function AppointmentsPage({ searchParams }: AppointmentsPag
                   <th>Servicio</th>
                   <th>Fecha</th>
                   <th>Estado</th>
+                  <th>Entrega</th>
                   <th>Accion</th>
                 </tr>
               </thead>
@@ -77,6 +78,19 @@ export default async function AppointmentsPage({ searchParams }: AppointmentsPag
                         <StatusBadge value={appointment.status} />
                       </td>
                       <td>
+                        <StatusBadge value={appointment.deliveryStatus} />
+                        {appointment.sentAt && (
+                          <span className="mt-1 block text-xs text-[#706d62]">
+                            {new Date(appointment.sentAt).toLocaleString("es-CO")}
+                          </span>
+                        )}
+                        {appointment.errorMessage && (
+                          <span className="mt-1 block max-w-64 text-xs text-red-700" title={appointment.errorMessage}>
+                            No entregado. Revisa la configuracion de WhatsApp.
+                          </span>
+                        )}
+                      </td>
+                      <td>
                         <div className="grid gap-3">
                           <AppointmentStatusForm id={appointment.id} status={appointment.status} />
                           {appointment.status !== "confirmed" && <QuickAppointmentButton id={appointment.id} />}
@@ -87,7 +101,7 @@ export default async function AppointmentsPage({ searchParams }: AppointmentsPag
                 })}
                 {appointments.length === 0 && (
                   <tr>
-                    <td className="py-6 text-[#706d62]" colSpan={6}>
+                    <td className="py-6 text-[#706d62]" colSpan={7}>
                       Sin solicitudes de cita para este filtro.
                     </td>
                   </tr>

@@ -60,6 +60,8 @@ export function BusinessWorkspace({
     accessToken: boolean;
     phoneNumberId: boolean;
     verifyToken: boolean;
+    appointmentTemplate: boolean;
+    quoteTemplate: boolean;
   };
 }) {
   const [selectedId, setSelectedId] = useState(businesses[0]?.id ?? "");
@@ -516,6 +518,8 @@ function WhatsAppStatusCard({
     accessToken: boolean;
     phoneNumberId: boolean;
     verifyToken: boolean;
+    appointmentTemplate: boolean;
+    quoteTemplate: boolean;
   };
 }) {
   const isConnected =
@@ -562,10 +566,20 @@ function WhatsAppStatusCard({
           <EnvironmentCheck label="Access Token" configured={environmentStatus.accessToken} required />
           <EnvironmentCheck label="Phone Number ID global" configured={environmentStatus.phoneNumberId} />
           <EnvironmentCheck label="Verify Token" configured={environmentStatus.verifyToken} required />
+          <EnvironmentCheck
+            label="Plantilla para confirmar citas"
+            configured={environmentStatus.appointmentTemplate}
+          />
+          <EnvironmentCheck label="Plantilla para cotizaciones" configured={environmentStatus.quoteTemplate} />
         </div>
         {!environmentStatus.appSecret && (
           <p className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm leading-6 text-red-800">
             WhatsApp permanece bloqueado en produccion hasta agregar WHATSAPP_APP_SECRET en Vercel.
+          </p>
+        )}
+        {(!environmentStatus.appointmentTemplate || !environmentStatus.quoteTemplate) && (
+          <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm leading-6 text-amber-900">
+            Configura plantillas aprobadas para notificar fuera de la ventana de 24 horas de WhatsApp.
           </p>
         )}
       </div>

@@ -34,6 +34,8 @@ export default async function BusinessesPage() {
             accessToken: Boolean(process.env.WHATSAPP_ACCESS_TOKEN),
             phoneNumberId: Boolean(process.env.WHATSAPP_PHONE_NUMBER_ID),
             verifyToken: Boolean(process.env.WHATSAPP_VERIFY_TOKEN),
+            appointmentTemplate: Boolean(process.env.WHATSAPP_APPOINTMENT_TEMPLATE_NAME),
+            quoteTemplate: Boolean(process.env.WHATSAPP_QUOTE_TEMPLATE_NAME),
           }}
         />
       </div>
