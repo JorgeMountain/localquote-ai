@@ -180,7 +180,8 @@ function buildSystemPrompt(
     customer?.customerName ? `Cliente: ${customer.customerName}` : "",
     customer?.customerPhone ? `Telefono del cliente: ${customer.customerPhone}` : "",
     `Descripcion: ${business.description}`,
-    `Servicios: ${business.services.join(", ")}`,
+    `Servicios heredados: ${business.services.join(", ")}`,
+    `Servicios estructurados: ${formatStructuredServices(business)}`,
     `Horarios: ${business.hours}`,
     `Ubicacion/cobertura: ${business.location}`,
     `Telefono: ${business.phone}`,
@@ -195,6 +196,25 @@ function buildSystemPrompt(
     "Ten en cuenta el historial reciente antes de pedir datos faltantes.",
     "Si detectas intencion de agendar o cotizar, pide los datos faltantes.",
   ].filter(Boolean).join("\n");
+}
+
+function formatStructuredServices(business: Business) {
+  const services = (business.structuredServices ?? []).filter((service) => service.isActive);
+  if (services.length === 0) return "Sin servicios estructurados; no inventes precios.";
+
+  return services
+    .map((service) => {
+      const price =
+        service.minPrice === undefined
+          ? "precio no configurado"
+          : service.maxPrice !== undefined && service.maxPrice !== service.minPrice
+            ? `${service.minPrice}-${service.maxPrice} COP`
+            : `${service.minPrice} COP`;
+      const duration = service.durationMinutes ? `${service.durationMinutes} minutos` : "duracion no configurada";
+      const evaluation = service.requiresEvaluation ? "requiere valoracion" : "no requiere valoracion";
+      return `${service.name}: ${price}; ${duration}; ${evaluation}; ${service.description}`;
+    })
+    .join(" | ");
 }
 
 function relevantLinkReply(text: string, links: BusinessLink[]) {

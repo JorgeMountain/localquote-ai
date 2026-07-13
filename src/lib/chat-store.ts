@@ -5,6 +5,7 @@ import type {
   BusinessFaq,
   BusinessHour,
   BusinessLink,
+  BusinessService,
   AvailabilitySlot,
   Conversation,
   Message,
@@ -26,6 +27,17 @@ type ChatContextPayload = {
     rules: string[];
     whatsapp_phone_number_id: string | null;
   };
+  business_services: Array<{
+    id: string;
+    business_id: string;
+    name: string;
+    description: string;
+    min_price: number | null;
+    max_price: number | null;
+    duration_minutes: number | null;
+    requires_evaluation: boolean;
+    is_active: boolean;
+  }>;
   faqs: Array<{
     id: string;
     business_id: string;
@@ -84,6 +96,7 @@ export type InternalChatContext = {
   businessHours: BusinessHour[];
   availabilitySlots: AvailabilitySlot[];
   appointmentRequests: AppointmentRequest[];
+  businessServices: BusinessService[];
 };
 
 function getInternalToken() {
@@ -120,6 +133,7 @@ export async function getInternalChatContext(
       phone: payload.business.phone,
       rules: payload.business.rules,
       whatsappPhoneNumberId: payload.business.whatsapp_phone_number_id ?? undefined,
+      structuredServices: payload.business_services.map(mapBusinessService),
     },
     faqs: payload.faqs.map((faq) => ({
       id: faq.id,
@@ -163,6 +177,21 @@ export async function getInternalChatContext(
       status: appointment.status,
       deliveryStatus: "pending",
     })),
+    businessServices: payload.business_services.map(mapBusinessService),
+  };
+}
+
+function mapBusinessService(service: ChatContextPayload["business_services"][number]): BusinessService {
+  return {
+    id: service.id,
+    businessId: service.business_id,
+    name: service.name,
+    description: service.description,
+    minPrice: service.min_price ?? undefined,
+    maxPrice: service.max_price ?? undefined,
+    durationMinutes: service.duration_minutes ?? undefined,
+    requiresEvaluation: service.requires_evaluation,
+    isActive: service.is_active,
   };
 }
 

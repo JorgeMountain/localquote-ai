@@ -34,13 +34,23 @@ import {
   updateFaqWithFeedback,
 } from "@/app/actions";
 import { ActionMessage } from "@/components/ActionForms";
-import type { AvailabilitySlot, Business, BusinessFaq, BusinessHour, BusinessLink, Profile } from "@/lib/types";
+import { ServicesEditor } from "@/components/business/ServicesEditor";
+import type {
+  AvailabilitySlot,
+  Business,
+  BusinessFaq,
+  BusinessHour,
+  BusinessLink,
+  BusinessService,
+  Profile,
+} from "@/lib/types";
 
 export function BusinessWorkspace({
   businesses,
   profiles,
   viewerProfile,
   faqs,
+  businessServices,
   businessHours,
   availabilitySlots,
   businessLinks,
@@ -51,6 +61,7 @@ export function BusinessWorkspace({
   profiles: Profile[];
   viewerProfile: Profile;
   faqs: BusinessFaq[];
+  businessServices: BusinessService[];
   businessHours: BusinessHour[];
   availabilitySlots: AvailabilitySlot[];
   businessLinks: BusinessLink[];
@@ -70,6 +81,10 @@ export function BusinessWorkspace({
   const businessFaqs = useMemo(
     () => (selectedBusiness ? faqs.filter((faq) => faq.businessId === selectedBusiness.id) : []),
     [faqs, selectedBusiness],
+  );
+  const selectedBusinessServices = useMemo(
+    () => (selectedBusiness ? businessServices.filter((service) => service.businessId === selectedBusiness.id) : []),
+    [businessServices, selectedBusiness],
   );
   const selectedBusinessHours = useMemo(
     () => (selectedBusiness ? businessHours.filter((hour) => hour.businessId === selectedBusiness.id) : []),
@@ -178,11 +193,10 @@ export function BusinessWorkspace({
                     />
                     <Field
                       name="services"
-                      label="Servicios y precios"
+                      label="Texto heredado de servicios"
                       defaultValue={selectedBusiness.services.join("\n")}
                       textarea
-                      required
-                      hint="Un servicio por linea. Incluye precio, duracion o condicion si aplica."
+                      hint="Se conserva como respaldo durante la migracion. Gestiona precios en la seccion estructurada siguiente."
                     />
                     <Field
                       name="rules"
@@ -195,6 +209,16 @@ export function BusinessWorkspace({
                     />
                   </div>
                 </form>
+
+                <section className="rounded-xl border border-black/10 bg-white p-5 shadow-sm">
+                  <FormHeader
+                    icon={Sparkles}
+                    eyebrow="Paso 2"
+                    title="Servicios y precios"
+                    description="Estos datos estructurados son la fuente de precios del bot. Si un precio no esta configurado, la IA no lo inventa."
+                  />
+                  <ServicesEditor businessId={selectedBusiness.id} services={selectedBusinessServices} />
+                </section>
 
                 <section className="rounded-xl border border-black/10 bg-white p-5 shadow-sm">
                   <FormHeader
@@ -224,7 +248,7 @@ export function BusinessWorkspace({
                 <section className="rounded-xl border border-black/10 bg-white p-5 shadow-sm">
                   <FormHeader
                     icon={HelpCircle}
-                    eyebrow="Paso 2"
+                    eyebrow="Paso 3"
                     title="Preguntas frecuentes"
                     description="Agrega respuestas aprobadas. El bot las usa como fuente principal antes de improvisar."
                   />

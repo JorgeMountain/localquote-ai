@@ -48,7 +48,10 @@ const handoffWords = ["asesor", "persona", "llamar", "whatsapp", "confirmar", "h
 export function analyzeCommercialRequest(message: string, business: Business): CommercialAnalysis {
   const normalized = normalize(message);
   const intent = detectCommercialIntent(normalized);
-  const service = detectService(normalized, business.services);
+  const structuredServiceNames = (business.structuredServices ?? [])
+    .filter((service) => service.isActive)
+    .map((service) => service.name);
+  const service = detectService(normalized, structuredServiceNames.length > 0 ? structuredServiceNames : business.services);
 
   if (intent === "appointment") {
     const preferredDate = detectDate(normalized);
@@ -94,7 +97,10 @@ export function analyzeCommercialRequest(message: string, business: Business): C
               description: message,
               minPrice,
               maxPrice,
-              notes: "Cotizacion estimada generada por IA. Requiere confirmacion del negocio.",
+              notes:
+                minPrice === 0 && maxPrice === 0
+                  ? "Precio no configurado. Requiere confirmacion del negocio."
+                  : "Cotizacion basada en los precios configurados. Requiere confirmacion del negocio.",
             }
           : undefined,
     };
@@ -227,20 +233,16 @@ function detectTime(normalized: string) {
 }
 
 function estimatePriceRange(business: Business, service?: string): [number, number] {
-  const normalizedService = normalize(service ?? "");
-  const explicitRange = extractPriceRange(service ?? "");
-  if (explicitRange) return explicitRange;
-
-  if (business.type === "dentist") {
-    if (normalizedService.includes("limpieza")) return [120000, 180000];
-    if (normalizedService.includes("blanqueamiento")) return [450000, 900000];
-    if (normalizedService.includes("ortodoncia")) return [0, 0];
-    return [120000, 250000];
+  const structuredService = business.structuredServices?.find(
+    (candidate) => candidate.isActive && normalize(candidate.name) === normalize(service ?? ""),
+  );
+  if (structuredService?.minPrice !== undefined) {
+    return [structuredService.minPrice, structuredService.maxPrice ?? structuredService.minPrice];
   }
 
-  if (normalizedService.includes("visita") || normalizedService.includes("diagnostico")) return [80000, 140000];
-  if (normalizedService.includes("instalacion")) return [120000, 320000];
-  return [80000, 220000];
+  const explicitRange = extractPriceRange(service ?? "");
+  if (explicitRange) return explicitRange;
+  return [0, 0];
 }
 
 function extractPriceRange(value: string): [number, number] | null {

@@ -9,6 +9,7 @@ import {
 import { createAnonRouteClient } from "@/lib/supabase/route";
 import { hasWhatsAppWebhookSecret, verifyMetaWebhookSignature } from "@/lib/webhook-security";
 import { sendWhatsAppText } from "@/lib/whatsapp";
+import { isPhone } from "@/lib/validation";
 
 export const runtime = "nodejs";
 
@@ -75,6 +76,14 @@ export async function POST(request: Request) {
   if (!incoming) return NextResponse.json({ ok: true });
 
   const { contact, message, phoneNumberId } = incoming;
+  if (
+    !isPhone(message.from)
+    || message.id.length > 512
+    || !phoneNumberId
+    || !/^\d{5,32}$/.test(phoneNumberId)
+  ) {
+    return NextResponse.json({ error: "Invalid WhatsApp message metadata" }, { status: 400 });
+  }
   const supabase = createAnonRouteClient();
   let claimed = false;
 

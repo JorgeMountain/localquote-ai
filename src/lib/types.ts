@@ -36,6 +36,19 @@ export type Business = {
   phone: string;
   rules: string[];
   whatsappPhoneNumberId?: string;
+  structuredServices?: BusinessService[];
+};
+
+export type BusinessService = {
+  id: string;
+  businessId: string;
+  name: string;
+  description: string;
+  minPrice?: number;
+  maxPrice?: number;
+  durationMinutes?: number;
+  requiresEvaluation: boolean;
+  isActive: boolean;
 };
 
 export type PublicBusiness = Omit<Business, "ownerId" | "rules" | "whatsappPhoneNumberId">;

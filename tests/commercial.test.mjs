@@ -71,6 +71,41 @@ test("crea borrador con servicio, fecha y hora futuros", () => {
   });
 });
 
+test("usa el precio estructurado configurado para una cotizacion", () => {
+  const analysis = analyzeCommercialRequest(
+    "Quiero cotizar blanqueamiento dental para corregir varias manchas visibles",
+    {
+      ...business,
+      structuredServices: [
+        {
+          id: "service",
+          businessId: business.id,
+          name: "Blanqueamiento dental",
+          description: "Precio aprobado",
+          minPrice: 450000,
+          maxPrice: 600000,
+          requiresEvaluation: true,
+          isActive: true,
+        },
+      ],
+    },
+  );
+
+  assert.equal(analysis.quoteDraft?.minPrice, 450000);
+  assert.equal(analysis.quoteDraft?.maxPrice, 600000);
+});
+
+test("no inventa un rango cuando el negocio no configuro precio", () => {
+  const analysis = analyzeCommercialRequest(
+    "Quiero cotizar blanqueamiento dental para corregir varias manchas visibles",
+    business,
+  );
+
+  assert.equal(analysis.quoteDraft?.minPrice, 0);
+  assert.equal(analysis.quoteDraft?.maxPrice, 0);
+  assert.match(analysis.quoteDraft?.notes ?? "", /Precio no configurado/);
+});
+
 function dateInBogota() {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: "America/Bogota",

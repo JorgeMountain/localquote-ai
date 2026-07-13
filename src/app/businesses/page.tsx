@@ -25,6 +25,7 @@ export default async function BusinessesPage() {
           profiles={data.profiles}
           viewerProfile={data.viewerProfile}
           faqs={data.faqs}
+          businessServices={data.businessServices}
           businessHours={data.businessHours}
           availabilitySlots={data.availabilitySlots}
           businessLinks={data.businessLinks}

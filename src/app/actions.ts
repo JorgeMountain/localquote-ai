@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { businesses, faqs } from "@/lib/seed";
 import { notifyCustomer } from "@/lib/customer-notifications";
+import { withActionFeedback, type ActionState } from "@/lib/action-state";
 import { createClient } from "@/lib/supabase/server";
 import type {
   AppointmentStatus,
@@ -15,10 +16,7 @@ import type {
   QuoteStatus,
 } from "@/lib/types";
 
-export type ActionState = {
-  status: "success" | "error";
-  message: string;
-} | null;
+export type { ActionState } from "@/lib/action-state";
 
 export async function updatePaymentReceiptStatusWithFeedback(
   _state: ActionState,
@@ -893,15 +891,7 @@ function revalidateCommercialPaths() {
 }
 
 async function withFeedback(action: () => Promise<void>, successMessage: string): Promise<ActionState> {
-  try {
-    await action();
-    return { status: "success", message: successMessage };
-  } catch (error) {
-    return {
-      status: "error",
-      message: error instanceof Error ? error.message : "No se pudo guardar el cambio.",
-    };
-  }
+  return withActionFeedback(action, successMessage);
 }
 
 async function createDemoLead(

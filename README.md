@@ -112,3 +112,5 @@ Los botones **Confirmar y notificar** y **Enviar por WhatsApp** solo cambian el 
 ## IA
 
 `AI_PROVIDER` acepta `deepseek`, `openai` o `none`. Sin una llave válida, el sistema usa respuestas deterministas basadas en la configuración del negocio. El historial se lee desde Supabase; el navegador no puede inyectar historial ni escribir directamente en las tablas privadas del chat.
+
+Los precios usados por la IA viven en `business_services`. El editor **Servicios y precios** permite definir rango, duración, valoración previa y visibilidad. La migración conserva `businesses.services` como texto heredado y crea registros estructurados sin borrar el contenido anterior. Cuando no existe un precio configurado, Tactio usa `0` como indicador interno de “precio pendiente” y no inventa rangos por tipo de negocio.

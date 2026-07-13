@@ -3,6 +3,7 @@ import { processChatMessage } from "@/lib/chat-service";
 import { consumeInternalRateLimit } from "@/lib/chat-store";
 import { createAnonRouteClient } from "@/lib/supabase/route";
 import type { ChatRequest } from "@/lib/types";
+import { isUuid } from "@/lib/validation";
 
 const maxRequestBytes = 32 * 1024;
 const maxMessageLength = 2000;
@@ -84,8 +85,4 @@ export async function POST(request: Request) {
       { status },
     );
   }
-}
-
-function isUuid(value: string) {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }

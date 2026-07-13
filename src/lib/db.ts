@@ -6,6 +6,7 @@ import type {
   BusinessFaq,
   BusinessHour,
   BusinessLink,
+  BusinessService,
   Conversation,
   Customer,
   Message,
@@ -85,6 +86,18 @@ type AppointmentRow = {
   provider_message_id: string | null;
 };
 
+type BusinessServiceRow = {
+  id: string;
+  business_id: string;
+  name: string;
+  description: string;
+  min_price: number | null;
+  max_price: number | null;
+  duration_minutes: number | null;
+  requires_evaluation: boolean;
+  is_active: boolean;
+};
+
 type QuoteRow = {
   id: string;
   business_id: string;
@@ -151,6 +164,7 @@ export type DashboardData = {
   profiles: Profile[];
   businesses: Business[];
   faqs: BusinessFaq[];
+  businessServices: BusinessService[];
   customers: Customer[];
   conversations: Conversation[];
   messages: Message[];
@@ -186,6 +200,7 @@ export async function getDashboardData(supabase: SupabaseClient, ownerId: string
       profiles,
       businesses,
       faqs: [],
+      businessServices: [],
       customers: [],
       conversations: [],
       messages: [],
@@ -200,6 +215,7 @@ export async function getDashboardData(supabase: SupabaseClient, ownerId: string
 
   const [
     faqsResult,
+    businessServicesResult,
     customersResult,
     conversationsResult,
     appointmentsResult,
@@ -211,6 +227,7 @@ export async function getDashboardData(supabase: SupabaseClient, ownerId: string
   ] =
     await Promise.all([
       supabase.from("business_faqs").select("*").in("business_id", businessIds),
+      supabase.from("business_services").select("*").in("business_id", businessIds).order("created_at"),
       supabase.from("customers").select("*").in("business_id", businessIds).order("created_at", { ascending: false }),
       supabase
         .from("conversations")
@@ -232,6 +249,7 @@ export async function getDashboardData(supabase: SupabaseClient, ownerId: string
 
   for (const result of [
     faqsResult,
+    businessServicesResult,
     customersResult,
     conversationsResult,
     appointmentsResult,
@@ -257,6 +275,7 @@ export async function getDashboardData(supabase: SupabaseClient, ownerId: string
     profiles,
     businesses,
     faqs: ((faqsResult.data ?? []) as FaqRow[]).map(mapFaq),
+    businessServices: ((businessServicesResult.data ?? []) as BusinessServiceRow[]).map(mapBusinessService),
     customers: ((customersResult.data ?? []) as CustomerRow[]).map(mapCustomer),
     conversations: ((conversationsResult.data ?? []) as ConversationRow[]).map(mapConversation),
     messages: ((messagesResult.data ?? []) as MessageRow[]).map(mapMessage),
@@ -389,6 +408,20 @@ function mapAppointment(row: AppointmentRow): AppointmentRequest {
     sentAt: row.sent_at ?? undefined,
     errorMessage: row.error_message ?? undefined,
     providerMessageId: row.provider_message_id ?? undefined,
+  };
+}
+
+function mapBusinessService(row: BusinessServiceRow): BusinessService {
+  return {
+    id: row.id,
+    businessId: row.business_id,
+    name: row.name,
+    description: row.description,
+    minPrice: row.min_price ?? undefined,
+    maxPrice: row.max_price ?? undefined,
+    durationMinutes: row.duration_minutes ?? undefined,
+    requiresEvaluation: row.requires_evaluation,
+    isActive: row.is_active,
   };
 }
 
