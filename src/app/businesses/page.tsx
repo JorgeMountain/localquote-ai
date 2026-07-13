@@ -29,6 +29,12 @@ export default async function BusinessesPage() {
           availabilitySlots={data.availabilitySlots}
           businessLinks={data.businessLinks}
           whatsappBusinessSlug={process.env.WHATSAPP_DEFAULT_BUSINESS_SLUG ?? ""}
+          whatsappEnvironmentStatus={{
+            appSecret: Boolean(process.env.WHATSAPP_APP_SECRET),
+            accessToken: Boolean(process.env.WHATSAPP_ACCESS_TOKEN),
+            phoneNumberId: Boolean(process.env.WHATSAPP_PHONE_NUMBER_ID),
+            verifyToken: Boolean(process.env.WHATSAPP_VERIFY_TOKEN),
+          }}
         />
       </div>
     </AppShell>

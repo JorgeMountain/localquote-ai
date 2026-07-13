@@ -45,6 +45,7 @@ export function BusinessWorkspace({
   availabilitySlots,
   businessLinks,
   whatsappBusinessSlug,
+  whatsappEnvironmentStatus,
 }: {
   businesses: Business[];
   profiles: Profile[];
@@ -54,6 +55,12 @@ export function BusinessWorkspace({
   availabilitySlots: AvailabilitySlot[];
   businessLinks: BusinessLink[];
   whatsappBusinessSlug: string;
+  whatsappEnvironmentStatus: {
+    appSecret: boolean;
+    accessToken: boolean;
+    phoneNumberId: boolean;
+    verifyToken: boolean;
+  };
 }) {
   const [selectedId, setSelectedId] = useState(businesses[0]?.id ?? "");
   const selectedBusiness = businesses.find((business) => business.id === selectedId) ?? businesses[0];
@@ -123,7 +130,11 @@ export function BusinessWorkspace({
             <div className="grid gap-6 xl:grid-cols-[0.82fr_1.18fr]">
               <aside className="grid content-start gap-4">
                 <CompletionCard completion={completion} business={selectedBusiness} faqCount={businessFaqs.length} />
-                <WhatsAppStatusCard business={selectedBusiness} whatsappBusinessSlug={whatsappBusinessSlug} />
+                <WhatsAppStatusCard
+                  business={selectedBusiness}
+                  whatsappBusinessSlug={whatsappBusinessSlug}
+                  environmentStatus={whatsappEnvironmentStatus}
+                />
                 <BotInstructionCard />
                 <DangerZone business={selectedBusiness} />
               </aside>
@@ -496,9 +507,16 @@ function AvailabilitySlotRow({ slot }: { slot: AvailabilitySlot }) {
 function WhatsAppStatusCard({
   business,
   whatsappBusinessSlug,
+  environmentStatus,
 }: {
   business: Business;
   whatsappBusinessSlug: string;
+  environmentStatus: {
+    appSecret: boolean;
+    accessToken: boolean;
+    phoneNumberId: boolean;
+    verifyToken: boolean;
+  };
 }) {
   const isConnected =
     Boolean(business.whatsappPhoneNumberId)
@@ -537,12 +555,45 @@ function WhatsAppStatusCard({
           </dd>
         </div>
       </dl>
+      <div className="mt-4 border-t border-black/10 pt-4">
+        <p className="text-sm font-semibold">Configuracion segura del servidor</p>
+        <div className="mt-3 grid gap-2">
+          <EnvironmentCheck label="App Secret de Meta" configured={environmentStatus.appSecret} required />
+          <EnvironmentCheck label="Access Token" configured={environmentStatus.accessToken} required />
+          <EnvironmentCheck label="Phone Number ID global" configured={environmentStatus.phoneNumberId} />
+          <EnvironmentCheck label="Verify Token" configured={environmentStatus.verifyToken} required />
+        </div>
+        {!environmentStatus.appSecret && (
+          <p className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm leading-6 text-red-800">
+            WhatsApp permanece bloqueado en produccion hasta agregar WHATSAPP_APP_SECRET en Vercel.
+          </p>
+        )}
+      </div>
       {!isConnected && (
         <p className="mt-3 text-sm leading-6 text-[#706d62]">
           Agrega el Phone Number ID de Meta. El slug global queda solo como respaldo para pruebas antiguas.
         </p>
       )}
     </section>
+  );
+}
+
+function EnvironmentCheck({
+  label,
+  configured,
+  required,
+}: {
+  label: string;
+  configured: boolean;
+  required?: boolean;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-lg bg-[#f8f6f1] px-3 py-2 text-sm">
+      <span>{label}{required ? " *" : ""}</span>
+      <span className={`font-semibold ${configured ? "text-[#3f551c]" : "text-red-700"}`}>
+        {configured ? "Configurado" : "Falta"}
+      </span>
+    </div>
   );
 }
 

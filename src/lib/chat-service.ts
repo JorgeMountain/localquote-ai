@@ -1,4 +1,5 @@
 import { generateAssistantReply } from "@/lib/ai";
+import { canCreateQuote, findMatchingActiveAppointment } from "@/lib/chat-policy";
 import {
   createInternalAppointment,
   getInternalChatContext,
@@ -59,8 +60,11 @@ export async function processChatMessage(input: {
   const analysis = analyzeCommercialRequest(commercialContext, context.business);
   const shouldUseFaqAnswer = analysis.intent === "faq" && hasRelevantFaq(input.message, context.faqs);
   const effectiveIntent = shouldUseFaqAnswer ? "faq" : analysis.intent;
+  const matchingAppointment = analysis.appointmentDraft
+    ? findMatchingActiveAppointment(context.appointmentRequests, session.customer_id, analysis.appointmentDraft)
+    : undefined;
   const appointmentAvailability =
-    analysis.appointmentDraft && !session.has_appointment
+    analysis.appointmentDraft && !matchingAppointment
       ? validateAppointmentAvailability({
           appointment: {
             businessId: context.business.id,
@@ -87,7 +91,7 @@ export async function processChatMessage(input: {
 
   if (
     analysis.appointmentDraft
-    && !session.has_appointment
+    && !matchingAppointment
     && (!appointmentAvailability || appointmentAvailability.canCreateRequest)
   ) {
     const candidate = {
@@ -107,7 +111,7 @@ export async function processChatMessage(input: {
   }
 
   const quote =
-    analysis.quoteDraft && !session.has_quote
+    analysis.quoteDraft && canCreateQuote(session.has_quote)
       ? {
           id: crypto.randomUUID(),
           businessId: context.business.id,
@@ -117,10 +121,12 @@ export async function processChatMessage(input: {
         }
       : undefined;
   const shouldAppendCommercialReply =
-    !(session.has_appointment && analysis.appointmentDraft)
+    !(matchingAppointment && analysis.appointmentDraft)
     && !(session.has_quote && analysis.quoteDraft);
   const generatedReply = shouldUseFaqAnswer
     ? ai.reply
+    : matchingAppointment
+      ? `${ai.reply} Ya tengo registrada esa solicitud para el ${matchingAppointment.preferredDate} a las ${matchingAppointment.preferredTime}.`
     : appointmentAvailability && !appointmentAvailability.canCreateRequest
       ? `${ai.reply} ${buildAvailabilityReply(appointmentAvailability)}`
       : appointmentRaceLost

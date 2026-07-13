@@ -40,6 +40,15 @@ npm run build
 
 Copia `.env.example` a `.env.local`. Nunca guardes llaves reales en Git.
 
+Tactio no incluye valores de respaldo para Supabase. Si estas variables faltan, la aplicacion se detiene con un error claro para evitar que localhost termine escribiendo por accidente en la base de produccion.
+
+### Desarrollo separado de produccion
+
+1. Crea un proyecto o una rama de desarrollo en Supabase.
+2. Copia su URL y publishable key a `.env.local`.
+3. Conserva las credenciales del proyecto productivo solamente en Vercel Production.
+4. Usa proyectos distintos para desarrollo, preview y produccion.
+
 Variables del servidor:
 
 - `DEEPSEEK_API_KEY` o `OPENAI_API_KEY`
@@ -92,6 +101,8 @@ Para producción:
 2. Agrega `WHATSAPP_APP_SECRET` al entorno del servidor.
 3. Suscribe el campo `messages`.
 4. Guarda el Phone Number ID correspondiente en cada negocio.
+
+En Vercel abre **Project Settings > Environment Variables**, crea `WHATSAPP_APP_SECRET` para Production y vuelve a desplegar. La pantalla **Configurar bot** muestra solo si cada variable existe; nunca muestra sus valores.
 
 ## IA
 
