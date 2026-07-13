@@ -107,6 +107,8 @@ Para producción:
 
 En Vercel abre **Project Settings > Environment Variables**, crea `WHATSAPP_APP_SECRET` para Production y vuelve a desplegar. La pantalla **Configurar bot** muestra solo si cada variable existe; nunca muestra sus valores.
 
+Para que el despliegue cargue, Vercel Production también debe tener `NEXT_PUBLIC_SUPABASE_URL` y `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`. Copia la URL y la publishable key desde **Supabase > Project Settings > API**, asígnalas únicamente al entorno correcto y pulsa **Redeploy**. Sin ellas, Tactio responde con un error explícito en lugar de conectarse silenciosamente a otra base.
+
 Los botones **Confirmar y notificar** y **Enviar por WhatsApp** solo cambian el estado después de que Meta devuelve un identificador de mensaje. Si falla, la entrega queda como `failed` y el estado comercial anterior se conserva. Para conversaciones fuera de la ventana de 24 horas, crea las dos plantillas aprobadas en Meta y configura sus nombres. La plantilla de cita espera cinco variables (cliente, negocio, servicio, fecha y hora); la de cotización espera cinco (cliente, negocio, servicio, rango y descripción).
 
 ## IA
